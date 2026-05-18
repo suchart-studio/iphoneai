@@ -24,9 +24,10 @@ const video = document.getElementById('webcam');
 const canvas = document.getElementById('output');
 const ctx = canvas.getContext('2d');
 let model = null;
-
-// เพิ่มตัวแปรเพื่อใช้เปิด/ปิด AI ชั่วคราว
 let isDetecting = false; 
+
+// ตั้งค่าเวลาที่ต้องการให้ส่งอัตโนมัติ (5000 มิลลิวินาที = 5 วินาที)
+const AUTO_UPLOAD_INTERVAL = 5000; 
 
 async function setupCamera() {
     try {
@@ -57,7 +58,6 @@ function updateUI() {
 }
 
 async function detectFrame() {
-    // ถ้าตั้ง isDetecting เป็น false ให้หยุดฟังก์ชันนี้ทันทีเพื่อคืน CPU ให้เบราว์เซอร์
     if(!model || !isDetecting) return;
     
     canvas.width = video.videoWidth;
@@ -89,9 +89,36 @@ async function detectFrame() {
     currentCounts = frameCounts;
     updateUI();
     
-    // เรียกตัวเองวนซ้ำไปเรื่อยๆ เฉพาะตอนที่ isDetecting เป็น true
     if(isDetecting) {
         requestAnimationFrame(detectFrame);
+    }
+}
+
+// ฟังก์ชันสำหรับส่งข้อมูลอัตโนมัติ
+async function autoUploadData() {
+    if (!isDetecting) return; // ถ้าไม่ได้เปิดกล้อง หรือระบบหยุดทำงาน ไม่ต้องส่ง
+
+    const btn = document.getElementById('upload-btn');
+    
+    try {
+        btn.innerText = "กำลังอัปโหลดอัตโนมัติ...";
+        btn.style.background = "#ff9500"; // เปลี่ยนเป็นสีส้มระหว่างส่ง
+        
+        // ส่งข้อมูลขึ้น Firebase
+        const newLogRef = push(ref(db, 'object_counts'));
+        await set(newLogRef, {
+            counts: currentCounts,
+            timestamp: serverTimestamp(),
+            device: "iPhone 16 Pro (Auto)"
+        });
+        
+        btn.innerText = "ระบบกำลังทำงานอัตโนมัติ (ส่งข้อมูลแล้ว)";
+        btn.style.background = "#34c759"; // เปลี่ยนกลับเป็นสีเขียว
+        
+    } catch (e) {
+        console.error("Auto Upload Error: ", e);
+        btn.innerText = "⚠️ ส่งข้อมูลอัตโนมัติล้มเหลว";
+        btn.style.background = "#ff3b30";
     }
 }
 
@@ -104,55 +131,11 @@ window.addEventListener('passwordCorrect', async () => {
     document.getElementById('upload-btn').innerText = "กำลังเปิดกล้อง...";
     await setupCamera();
     
-    document.getElementById('upload-btn').innerText = "บันทึกข้อมูลขึ้น Firebase";
+    document.getElementById('upload-btn').innerText = "ระบบทำงานอัตโนมัติ (ทุกๆ 5 วินาที)";
     
-    // เริ่มเปิด AI
     isDetecting = true;
     detectFrame();
-});
 
-// ส่วนบันทึกข้อมูลที่แก้ไขแล้ว (ไม่ใช้ alert)
-document.getElementById('upload-btn').addEventListener('click', async () => {
-    const btn = document.getElementById('upload-btn');
-    if (btn.disabled) return; // ป้องกันการกดเบิ้ล
-
-    try {
-        btn.disabled = true;
-        btn.innerText = "กำลังส่งข้อมูล...";
-        
-        // 1. สั่งหยุด AI ชั่วคราวเพื่อกันหน้าเว็บค้าง
-        isDetecting = false; 
-
-        // 2. ส่งข้อมูลขึ้น Firebase
-        const newLogRef = push(ref(db, 'object_counts'));
-        await set(newLogRef, {
-            counts: currentCounts,
-            timestamp: serverTimestamp(),
-            device: "iPhone 16 Pro"
-        });
-        
-        // 3. เปลี่ยนข้อความบนปุ่มแทนการใช้ alert()
-        btn.innerText = "✅ บันทึกข้อมูลสำเร็จ!";
-        
-        // 4. หน่วงเวลา 1.5 วินาที แล้วเปิด AI กลับมาทำงานใหม่
-        setTimeout(() => {
-            btn.innerText = "บันทึกข้อมูลขึ้น Firebase";
-            btn.disabled = false;
-            
-            isDetecting = true;
-            detectFrame(); // สั่งให้ AI กลับมาตรวจจับต่อ
-        }, 1500);
-
-    } catch (e) {
-        console.error("Firebase Error: ", e);
-        btn.innerText = "❌ เกิดข้อผิดพลาด";
-        
-        setTimeout(() => {
-            btn.innerText = "บันทึกข้อมูลขึ้น Firebase";
-            btn.disabled = false;
-            
-            isDetecting = true;
-            detectFrame();
-        }, 2000);
-    }
+    // 🚀 เริ่มต้นระบบส่งข้อมูลอัตโนมัติแบบวนลูปต่อเนื่อง
+    setInterval(autoUploadData, AUTO_UPLOAD_INTERVAL);
 });
