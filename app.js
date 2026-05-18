@@ -2,7 +2,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
 import { getDatabase, ref, push, set, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
 
-// คอนฟิกจริงของคุณที่คุณส่งมา
 const firebaseConfig = {
   apiKey: "AIzaSyDMMwciq6QoLSaWK6xfdr0U3ynyahtoaSk",
   authDomain: "studio-a33fe.firebaseapp.com",
@@ -17,7 +16,6 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
-// วัตถุที่ต้องการตรวจจับตามเงื่อนไข
 const targetClasses = ['person', 'dog', 'cat', 'car', 'motorcycle', 'truck', 'bus', 'bicycle'];
 let currentCounts = {};
 targetClasses.forEach(c => currentCounts[c] = 0);
@@ -27,7 +25,9 @@ const canvas = document.getElementById('output');
 const ctx = canvas.getContext('2d');
 let model = null;
 
-// ตั้งค่ากล้องหลัง iPhone 16 Pro
+// เพิ่มตัวแปรเพื่อใช้เปิด/ปิด AI ชั่วคราว
+let isDetecting = false; 
+
 async function setupCamera() {
     try {
         const stream = await navigator.mediaDevices.getUserMedia({
@@ -40,7 +40,6 @@ async function setupCamera() {
         });
     } catch (err) {
         console.error("Camera error:", err);
-        alert("ไม่สามารถเข้าถึงกล้องได้ กรุณาตรวจสอบสิทธิ์การเข้าถึงกล้องบน iPhone ของคุณ");
     }
 }
 
@@ -57,9 +56,9 @@ function updateUI() {
     });
 }
 
-// ตรวจจับวัตถุด้วย AI เฟรมต่อเฟรม
 async function detectFrame() {
-    if(!model) return;
+    // ถ้าตั้ง isDetecting เป็น false ให้หยุดฟังก์ชันนี้ทันทีเพื่อคืน CPU ให้เบราว์เซอร์
+    if(!model || !isDetecting) return;
     
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
@@ -89,10 +88,13 @@ async function detectFrame() {
 
     currentCounts = frameCounts;
     updateUI();
-    requestAnimationFrame(detectFrame);
+    
+    // เรียกตัวเองวนซ้ำไปเรื่อยๆ เฉพาะตอนที่ isDetecting เป็น true
+    if(isDetecting) {
+        requestAnimationFrame(detectFrame);
+    }
 }
 
-// เริ่มทำงานเมื่อปลดล็อกรหัสผ่านสำเร็จ
 window.addEventListener('passwordCorrect', async () => {
     updateUI();
     document.getElementById('upload-btn').innerText = "กำลังโหลดโมเดล AI...";
@@ -103,16 +105,25 @@ window.addEventListener('passwordCorrect', async () => {
     await setupCamera();
     
     document.getElementById('upload-btn').innerText = "บันทึกข้อมูลขึ้น Firebase";
+    
+    // เริ่มเปิด AI
+    isDetecting = true;
     detectFrame();
 });
 
-// บันทึกข้อมูลเข้า Realtime Database
+// ส่วนบันทึกข้อมูลที่แก้ไขแล้ว (ไม่ใช้ alert)
 document.getElementById('upload-btn').addEventListener('click', async () => {
+    const btn = document.getElementById('upload-btn');
+    if (btn.disabled) return; // ป้องกันการกดเบิ้ล
+
     try {
-        const btn = document.getElementById('upload-btn');
-        btn.innerText = "กำลังบันทึก...";
+        btn.disabled = true;
+        btn.innerText = "กำลังส่งข้อมูล...";
         
-        // ใช้ push() เพื่อสร้าง ID แบบสุ่มอัตโนมัติ และเซ็ตข้อมูลลงไป
+        // 1. สั่งหยุด AI ชั่วคราวเพื่อกันหน้าเว็บค้าง
+        isDetecting = false; 
+
+        // 2. ส่งข้อมูลขึ้น Firebase
         const newLogRef = push(ref(db, 'object_counts'));
         await set(newLogRef, {
             counts: currentCounts,
@@ -120,10 +131,28 @@ document.getElementById('upload-btn').addEventListener('click', async () => {
             device: "iPhone 16 Pro"
         });
         
-        alert("บันทึกข้อมูลสำเร็จ!");
-        btn.innerText = "บันทึกข้อมูลขึ้น Firebase";
+        // 3. เปลี่ยนข้อความบนปุ่มแทนการใช้ alert()
+        btn.innerText = "✅ บันทึกข้อมูลสำเร็จ!";
+        
+        // 4. หน่วงเวลา 1.5 วินาที แล้วเปิด AI กลับมาทำงานใหม่
+        setTimeout(() => {
+            btn.innerText = "บันทึกข้อมูลขึ้น Firebase";
+            btn.disabled = false;
+            
+            isDetecting = true;
+            detectFrame(); // สั่งให้ AI กลับมาตรวจจับต่อ
+        }, 1500);
+
     } catch (e) {
         console.error("Firebase Error: ", e);
-        alert("เกิดข้อผิดพลาด: " + e.message);
+        btn.innerText = "❌ เกิดข้อผิดพลาด";
+        
+        setTimeout(() => {
+            btn.innerText = "บันทึกข้อมูลขึ้น Firebase";
+            btn.disabled = false;
+            
+            isDetecting = true;
+            detectFrame();
+        }, 2000);
     }
 });
