@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>YOLO Tracker & Counter</title>
+    <link rel="stylesheet" href="style.css">
+    
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
+</head>
+<body>
+
+    <div id="login-screen">
+        <h2>กรุณาใส่รหัสผ่าน</h2>
+        <input type="password" id="pwd" placeholder="******">
+        <button onclick="checkPassword()">เข้าสู่ระบบ</button>
+    </div>
+
+    <div id="app-container">
+        <video id="webcam" autoplay playsinline muted></video>
+        <canvas id="output"></canvas>
+        
+        <div id="ui-layer">
+            <div class="stats-grid" id="stats">
+                </div>
+            <button id="upload-btn">บันทึกข้อมูลขึ้น Firebase</button>
+            <div style="text-align:center; margin-top:10px;">
+                <a href="dashboard.html" style="color:white;">ไปที่หน้า Dashboard</a>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="app.js"></script>
+    
+    <script>
+        // ระบบรหัสผ่านอย่างง่าย
+        function checkPassword() {
+            const pwd = document.getElementById('pwd').value;
+            if(pwd === "878556") {
+                document.getElementById('login-screen').style.display = 'none';
+                document.getElementById('app-container').style.display = 'block';
+                // Trigger event ไปที่ app.js เพื่อเปิดกล้อง
+                window.dispatchEvent(new Event('passwordCorrect'));
+            } else {
+                alert("รหัสผ่านไม่ถูกต้อง");
+            }
+        }
+    </script>
+</body>
+</html>

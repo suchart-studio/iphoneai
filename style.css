@@ -1,0 +1,125 @@
+/* style.css */
+:root {
+    --bg-color: #121212;
+    --text-color: #ffffff;
+    --primary: #0a84ff;
+}
+
+body, html {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    overflow: hidden; /* ป้องกันการเลื่อนหน้าจอ */
+}
+
+/* --- ส่วน Login --- */
+#login-screen {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: #000;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+
+#login-screen input {
+    font-size: 24px;
+    padding: 15px;
+    border-radius: 12px;
+    border: none;
+    text-align: center;
+    margin-bottom: 20px;
+    width: 200px;
+}
+
+#login-screen button {
+    font-size: 18px;
+    padding: 12px 30px;
+    border-radius: 12px;
+    background: var(--primary);
+    color: white;
+    border: none;
+    font-weight: bold;
+}
+
+/* --- ส่วน Camera App --- */
+#app-container {
+    display: none;
+    position: relative;
+    width: 100%;
+    height: 100%;
+    padding-top: env(safe-area-inset-top); /* สำหรับ Notch/Dynamic Island ของ iPhone */
+}
+
+video, canvas {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover; /* ให้เต็มจอแนวตั้ง */
+    z-index: 1;
+}
+
+#ui-layer {
+    position: absolute;
+    bottom: env(safe-area-inset-bottom);
+    left: 0;
+    width: 100%;
+    z-index: 10;
+    background: rgba(0,0,0,0.7);
+    padding: 20px;
+    box-sizing: border-box;
+    border-top-left-radius: 20px;
+    border-top-right-radius: 20px;
+}
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    margin-bottom: 15px;
+}
+
+.stat-box {
+    background: rgba(255,255,255,0.1);
+    padding: 10px;
+    border-radius: 8px;
+    text-align: center;
+    font-size: 12px;
+}
+
+.stat-box span {
+    display: block;
+    font-size: 18px;
+    font-weight: bold;
+    color: var(--primary);
+}
+
+#upload-btn {
+    width: 100%;
+    padding: 15px;
+    background: #34c759;
+    color: white;
+    font-size: 18px;
+    font-weight: bold;
+    border: none;
+    border-radius: 12px;
+}
+
+/* --- ส่วน Dashboard --- */
+.dashboard-container {
+    padding: env(safe-area-inset-top) 20px 20px 20px;
+    height: 100%;
+    overflow-y: auto;
+}
+canvas#myChart {
+    background: rgba(255,255,255,0.05);
+    border-radius: 12px;
+    margin-top: 20px;
+}
