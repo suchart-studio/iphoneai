@@ -2,296 +2,143 @@
 <html lang="th">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Traffic Management Dashboard (1920x1080 Desktop)</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Traffic Collector (iPhone Portrait)</title>
     
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
-
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
 
     <style>
         :root {
-            --bg-dark: #09090b;
-            --panel-bg: #141416;
-            --card-bg: #1f1f23;
-            --text-main: #f4f4f5;
-            --text-muted: #a1a1aa;
-            --primary: #007aff;
+            --bg-color: #000000;
+            --card-bg: #1c1c1e;
+            --text-color: #ffffff;
+            --text-secondary: #aeaeb2;
+            --primary: #0a84ff;
             --danger: #ff453a;
             --warning: #ff9f0a;
-            --success: #30d158;
         }
 
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
+        *, *::before, *::after { box-sizing: border-box; }
 
         body, html {
-            width: 1920px;
-            height: 1080px;
-            background-color: var(--bg-dark);
-            color: var(--text-main);
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            margin: 0; padding: 0; width: 100%; height: 100%;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
             overflow: hidden;
         }
 
-        /* --- 🔒 หน้าจอระบบความปลอดภัย Login --- */
+        /* --- 🔒 หน้าจอ Lock Screen --- */
         #login-screen {
-            position: fixed;
-            top: 0; left: 0; width: 100%; height: 100%;
-            background: #000000;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            z-index: 9999;
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: #000000; display: flex; flex-direction: column;
+            justify-content: center; align-items: center; z-index: 9999; padding: 20px;
         }
-
-        .login-box {
-            background: var(--panel-bg);
-            padding: 40px;
-            border-radius: 20px;
-            border: 1px solid #27272a;
-            text-align: center;
-            width: 400px;
-        }
-
-        .login-box h2 {
-            font-size: 24px;
-            margin-bottom: 25px;
-        }
-
+        .login-box { width: 100%; max-width: 320px; text-align: center; }
+        .login-box h2 { font-size: 22px; margin-bottom: 25px; font-weight: 600; }
         .login-box input {
-            width: 100%;
-            font-size: 24px;
-            padding: 12px;
-            border-radius: 10px;
-            border: 1px solid #3f3f46;
-            background: var(--card-bg);
-            color: white;
-            text-align: center;
-            margin-bottom: 20px;
-            letter-spacing: 4px;
+            width: 100%; font-size: 28px; padding: 15px; border-radius: 14px;
+            border: none; text-align: center; margin-bottom: 20px;
+            background: var(--card-bg); color: white; letter-spacing: 6px;
         }
-
         .login-box button {
-            width: 100%;
-            font-size: 18px;
-            padding: 14px;
-            border-radius: 10px;
-            background: var(--primary);
-            color: white;
-            border: none;
-            font-weight: bold;
-            cursor: pointer;
+            width: 100%; font-size: 18px; padding: 16px; border-radius: 14px;
+            background: var(--primary); color: white; border: none; font-weight: bold;
         }
 
-        /* --- 🖥️ โครงสร้าง Dashboard (1920x1080 Desktop Layout) --- */
+        /* --- UI สำหรับ iPhone --- */
         #app-container {
-            display: none;
-            width: 100%;
-            height: 100%;
-            display: flex;
+            display: none; width: 100%; height: 100%;
+            padding-top: env(safe-area-inset-top);
+            padding-bottom: env(safe-area-inset-bottom);
+            display: flex; flex-direction: column;
         }
 
-        .control-sidebar {
-            width: 480px;
-            height: 100%;
-            background-color: var(--panel-bg);
-            border-right: 1px solid #27272a;
-            padding: 24px;
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-            z-index: 10;
-            box-shadow: 10px 0 30px rgba(0,0,0,0.5);
+        .camera-container {
+            width: 100%; height: 40%; position: relative; background: #000;
+        }
+        video, canvas {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover;
         }
 
-        .map-dashboard-main {
-            flex: 1;
-            height: 100%;
-            position: relative;
-            background: #111;
+        .ui-container {
+            flex: 1; background: #121214; border-top: 1px solid #2c2c2e;
+            padding: 16px; display: flex; flex-direction: column; justify-content: space-between;
         }
 
-        #map {
-            width: 100%;
-            height: 100%;
-        }
-
-        .camera-wrapper {
-            width: 100%;
-            height: 250px;
-            position: relative;
-            background: #000;
-            border-radius: 14px;
-            overflow: hidden;
-            border: 1px solid #3f3f46;
-        }
-
-        #webcam, #ai-overlay {
-            position: absolute;
-            top: 0; left: 0;
-            width: 100%; height: 100%;
-            object-fit: cover;
-        }
-
-        .timer-panel {
-            background: var(--card-bg);
-            border-radius: 14px;
-            padding: 16px;
-            text-align: center;
-            border: 1px solid #27272a;
-            margin: 15px 0;
-        }
-
-        .timer-title {
-            font-size: 12px;
-            color: var(--text-muted);
-            text-transform: uppercase;
-            letter-spacing: 1.5px;
-        }
-
+        .app-header { text-align: center; }
+        .app-header h1 { font-size: 12px; text-transform: uppercase; letter-spacing: 2px; color: var(--text-secondary); margin: 0; }
+        .app-header p { font-size: 16px; font-weight: 700; margin: 4px 0; }
+        
         .countdown-clock {
-            font-size: 48px;
-            font-weight: 800;
-            color: var(--warning);
-            font-family: monospace;
-            margin-top: 5px;
+            font-size: 32px; font-weight: 700; color: var(--warning);
+            font-family: monospace; background: rgba(255, 159, 10, 0.1);
+            padding: 4px 16px; border-radius: 20px; display: inline-block; margin-top: 4px;
         }
 
-        .counter-grid {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 12px;
-            margin-bottom: 15px;
+        .cumulative-grid {
+            display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin: 10px 0;
         }
-
-        .counter-card {
-            background: var(--card-bg);
-            border-radius: 12px;
-            padding: 14px;
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            border: 1px solid rgba(255,255,255,0.02);
+        .cum-box {
+            background: var(--card-bg); border-radius: 14px; padding: 12px;
+            display: flex; align-items: center; gap: 10px;
         }
+        .cum-icon { font-size: 22px; }
+        .cum-info { display: flex; flex-direction: column; }
+        .cum-label { font-size: 10px; color: var(--text-secondary); text-transform: uppercase; }
+        .cum-value { font-size: 24px; font-weight: 700; font-family: monospace; }
 
-        .counter-icon { font-size: 26px; }
-        .counter-info { display: flex; flex-direction: column; }
-        .counter-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; }
-        .counter-value { font-size: 28px; font-weight: 700; font-family: monospace; }
-
-        .control-btn {
-            width: 100%;
-            padding: 20px;
-            font-size: 18px;
-            font-weight: 700;
-            border: none;
-            border-radius: 14px;
-            color: white;
-            cursor: pointer;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            transition: all 0.2s ease;
+        .action-btn {
+            width: 100%; padding: 18px; font-size: 16px; font-weight: 700;
+            border: none; border-radius: 16px; color: white; text-transform: uppercase;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
         }
-        .btn-ready { background: var(--primary); }
-        .btn-active { background: var(--danger); animation: pulse 1.5s infinite; }
-
-        @keyframes pulse {
-            0% { opacity: 1; }
-            50% { opacity: 0.8; }
-            100% { opacity: 1; }
-        }
-
-        .custom-map-label {
-            background: rgba(255, 69, 58, 0.95) !important;
-            border: 1px solid #fff !important;
-            color: #fff !important;
-            font-weight: bold !important;
-            font-size: 13px !important;
-            border-radius: 6px !important;
-            padding: 3px 8px !important;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.4);
-            white-space: nowrap;
-        }
+        .btn-start { background: var(--primary); }
+        .btn-active { background: var(--danger); }
     </style>
 </head>
 <body>
 
     <div id="login-screen">
         <div class="login-box">
-            <h2>⚙️ Traffic Console Terminal Login</h2>
+            <h2>🔒 ตรวจสอบสิทธิ์ผู้ใช้งาน (iPhone)</h2>
             <input type="password" id="password-input" placeholder="••••••" autofocus inputmode="numeric">
-            <button onclick="verifyPassword()">UNLOCK TERMINAL</button>
+            <button onclick="verifyPassword()">เข้าสู่ระบบ</button>
         </div>
     </div>
 
-    <div id="app-container">
+    <div id="app-container" style="display:none;">
+        <div class="camera-container">
+            <video id="webcam" autoplay playsinline muted></video>
+            <canvas id="ai-overlay"></canvas>
+        </div>
         
-        <div class="control-sidebar">
-            <div>
-                <h1 style="font-size: 20px; font-weight: 700; margin-bottom: 4px;">TRAFFIC NODE MONITOR</h1>
-                <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 20px;">สถิติการตรวจนับความหนาแน่นวัตถุรายนาที</p>
-
-                <div class="camera-wrapper">
-                    <video id="webcam" autoplay playsinline muted></video>
-                    <canvas id="ai-overlay"></canvas>
-                </div>
-
-                <div class="timer-panel">
-                    <div class="timer-title" id="timer-status">SESSION TIME REMAINING</div>
-                    <div id="countdown-display" class="countdown-clock">01:00</div>
-                </div>
-
-                <div class="counter-grid">
-                    <div class="counter-card">
-                        <span class="counter-icon">👤</span>
-                        <div class="counter-info"><span class="counter-label">People</span><span class="counter-value" id="total-person">0</span></div>
-                    </div>
-                    <div class="counter-card">
-                        <span class="counter-icon">🚗</span>
-                        <div class="counter-info"><span class="counter-label">Cars</span><span class="counter-value" id="total-car">0</span></div>
-                    </div>
-                    <div class="counter-card">
-                        <span class="counter-icon">🏍️</span>
-                        <div class="counter-info"><span class="counter-label">Motorcycles</span><span class="counter-value" id="total-motorcycle">0</span></div>
-                    </div>
-                    <div class="counter-card">
-                        <span class="counter-icon">🚛</span>
-                        <div class="counter-info"><span class="counter-label">Trucks</span><span class="counter-value" id="total-truck">0</span></div>
-                    </div>
-                    <div class="counter-card">
-                        <span class="counter-icon">🚌</span>
-                        <div class="counter-info"><span class="counter-label">Buses</span><span class="counter-value" id="total-bus">0</span></div>
-                    </div>
-                    <div class="counter-card">
-                        <span class="counter-icon">🚲</span>
-                        <div class="counter-info"><span class="counter-label">Bicycles</span><span class="counter-value" id="total-bicycle">0</span></div>
-                    </div>
-                </div>
+        <div class="ui-container">
+            <div class="app-header">
+                <h1>Traffic Capture Node</h1>
+                <p id="session-status">READY TO RECORD</p>
+                <div id="countdown-display" class="countdown-clock">01:00</div>
             </div>
 
-            <div>
-                <button id="master-btn" class="control-btn btn-ready" disabled onclick="startTrackingSession()">LOADING AI MODEL...</button>
+            <div class="cumulative-grid">
+                <div class="cum-box"><span class="cum-icon">👤</span><div class="cum-info"><span class="cum-label">People</span><span class="cum-value" id="total-person">0</span></div></div>
+                <div class="cum-box"><span class="cum-icon">🚗</span><div class="cum-info"><span class="cum-label">Cars</span><span class="cum-value" id="total-car">0</span></div></div>
+                <div class="cum-box"><span class="cum-icon">🏍️</span><div class="cum-info"><span class="cum-label">Motorcycles</span><span class="cum-value" id="total-motorcycle">0</span></div></div>
+                <div class="cum-box"><span class="cum-icon">🚛</span><div class="cum-info"><span class="cum-label">Trucks</span><span class="cum-value" id="total-truck">0</span></div></div>
+                <div class="cum-box"><span class="cum-icon">🚌</span><div class="cum-info"><span class="cum-label">Buses</span><span class="cum-value" id="total-bus">0</span></div></div>
+                <div class="cum-box"><span class="cum-icon">🚲</span><div class="cum-info"><span class="cum-label">Bicycles</span><span class="cum-value" id="total-bicycle">0</span></div></div>
             </div>
-        </div>
 
-        <div class="map-dashboard-main">
-            <div id="map"></div>
+            <button id="master-btn" class="action-btn btn-start" disabled onclick="startOneMinuteSession()">กำลังโหลด AI...</button>
         </div>
-
     </div>
 
     <script>
-        // --- 🔑 คอนฟิก Firebase ที่ใช้งานจริงของคุณ ---
+        // กำหนดคอนฟิก Firebase Realtime Database ของคุณ
         const firebaseConfig = {
           apiKey: "AIzaSyDMMwciq6QoLSaWK6xfdr0U3ynyahtoaSk",
           authDomain: "studio-a33fe.firebaseapp.com",
@@ -303,7 +150,6 @@
           measurementId: "G-P7Q5TTLS5Y"
         };
         
-        // เริ่มต้นการทำงาน Firebase
         firebase.initializeApp(firebaseConfig);
         const database = firebase.database();
 
@@ -313,92 +159,63 @@
         };
         const targetClasses = Object.keys(classMapping);
 
-        let model = null;
-        let isTracking = false;
-        let countdownTimer = null;
-        let timeLeft = 60; 
-        let currentLatitude = 13.7563;  
-        let currentLongitude = 100.5018; 
-        let map = null;
-        let mapMarkersLayers = [];
-
-        let cumulativeCounts = {};
-        targetClasses.forEach(c => cumulativeCounts[c] = 0);
-
-        let trackedObjects = []; 
-        let nextObjectId = 0;
-        const DISTANCE_THRESHOLD = 90; 
-        const TRACK_MAX_AGE = 1200;    
+        let model = null, isTracking = false, countdownTimer = null, timeLeft = 60;
+        let currentLatitude = 13.7563, currentLongitude = 100.5018;
+        let cumulativeCounts = {}; targetClasses.forEach(c => cumulativeCounts[c] = 0);
+        let trackedObjects = []; let nextObjectId = 0;
+        const DISTANCE_THRESHOLD = 90; const TRACK_MAX_AGE = 1200;
 
         function verifyPassword() {
             if(document.getElementById('password-input').value === "878556") {
                 document.getElementById('login-screen').style.display = 'none';
                 document.getElementById('app-container').style.display = 'flex';
-                initDashboardSystem();
-            } else {
-                alert("รหัสผ่านไม่ถูกต้อง");
-            }
+                initMobileCollector();
+            } else { alert("รหัสผ่านไม่ถูกต้อง"); }
         }
 
-        function initMap() {
-            map = L.map('map', { zoomControl: true }).setView([currentLatitude, currentLongitude], 13);
-            
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '© OpenStreetMap contributors'
-            }).addTo(map);
-
+        function initMobileCollector() {
             if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(position => {
+                navigator.geolocation.watchPosition(position => {
                     currentLatitude = position.coords.latitude;
                     currentLongitude = position.coords.longitude;
-                    map.setView([currentLatitude, currentLongitude], 15);
-                }, () => { console.log("กรุณาเปิด GPS เพื่อให้หมุดปักตรงตำแหน่งจริง"); });
+                }, null, { enableHighAccuracy: true });
             }
+            initCameraAndAI();
         }
 
-        async function initDashboardSystem() {
-            initMap();
-            loadMarkersFromFirebase(); 
-
+        async function initCameraAndAI() {
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({
-                    video: { width: 1280, height: 720, facingMode: "environment" }, audio: false
+                    video: { facingMode: "environment" }, audio: false
                 });
                 document.getElementById('webcam').srcObject = stream;
                 model = await cocoSsd.load();
-                
                 const btn = document.getElementById('master-btn');
-                btn.innerText = "START 1-MIN SESSION";
+                btn.innerText = "START 1-MIN COUNT";
                 btn.disabled = false;
-                
                 runPredictionEngine();
-            } catch (err) {
-                alert("ไม่สามารถเข้าถึงกล้องเว็บแคมได้");
-            }
+            } catch (err) { alert("ไม่สามารถเข้าถึงกล้องหลังได้"); }
         }
 
-        function startTrackingSession() {
+        function startOneMinuteSession() {
             if(isTracking) return;
-
             isTracking = true;
-            timeLeft = 60; 
+            timeLeft = 60;
             trackedObjects = [];
-            
             targetClasses.forEach(c => {
                 cumulativeCounts[c] = 0;
                 document.getElementById(`total-${c}`).innerText = "0";
             });
 
             const btn = document.getElementById('master-btn');
-            btn.innerText = "PROCESSING TRAFFIC DATA...";
-            btn.className = "control-btn btn-active";
-            document.getElementById('timer-status').innerText = "RECORDING LIVE NODES...";
+            btn.innerText = "RECORDING DATA...";
+            btn.className = "action-btn btn-active";
+            document.getElementById('session-status').innerText = "LIVE CAPTURE ACTIVE";
 
             countdownTimer = setInterval(() => {
                 timeLeft--;
-                let mins = String(Math.floor(timeLeft / 60)).padStart(2, '0');
                 let secs = String(timeLeft % 60).padStart(2, '0');
-                document.getElementById('countdown-display').innerText = `${mins}:${secs}`;
+                document.getElementById('countdown-display').innerText = `00:${secs}`;
 
                 if(timeLeft <= 0) {
                     stopAndUploadSession();
@@ -412,14 +229,12 @@
             document.getElementById('countdown-display').innerText = "01:00";
             
             const btn = document.getElementById('master-btn');
-            btn.innerText = "START 1-MIN SESSION";
-            btn.className = "control-btn btn-ready";
-            document.getElementById('timer-status').innerText = "SESSION COMPLETED";
+            btn.innerText = "START 1-MIN COUNT";
+            btn.className = "action-btn btn-start";
+            document.getElementById('session-status').innerText = "DATA UPLOADING...";
 
             let totalVehicles1Min = cumulativeCounts['car'] + cumulativeCounts['motorcycle'] + 
                                     cumulativeCounts['truck'] + cumulativeCounts['bus'] + cumulativeCounts['bicycle'];
-
-            //คำนวณประมาณการรายชั่วโมง (ยอดรวม 1 นาที * 60)
             let estimatedHourlyTraffic = totalVehicles1Min * 60;
 
             const sessionPayload = {
@@ -431,55 +246,12 @@
                 hourly_estimate: estimatedHourlyTraffic
             };
 
-            // ส่งข้อมูลไปเก็บบน Firebase Realtime Database
             database.ref('traffic_sessions').push(sessionPayload)
                 .then(() => {
-                    console.log("บันทึกข้อมูลและส่งค่าไปยัง Firebase สำเร็จ!");
-                    loadMarkersFromFirebase(); 
+                    document.getElementById('session-status').innerText = "UPLOAD SUCCESS!";
+                    alert("ส่งข้อมูลการจราจร 1 นาทีขึ้นระบบคลาวด์เรียบร้อยแล้ว!");
                 })
-                .catch(error => alert("Firebase Error: " + error.message));
-        }
-
-        function loadMarkersFromFirebase() {
-            database.ref('traffic_sessions').once('value', (snapshot) => {
-                mapMarkersLayers.forEach(layer => map.removeLayer(layer));
-                mapMarkersLayers = [];
-
-                snapshot.forEach((childSnapshot) => {
-                    const data = childSnapshot.val();
-                    if(data.latitude && data.longitude) {
-                        
-                        let circleRadius = Math.max(40, data.hourly_estimate * 0.2);
-
-                        let trafficCircle = L.circle([data.latitude, data.longitude], {
-                            color: '#ff453a',
-                            fillColor: '#ff453a',
-                            fillOpacity: 0.4,
-                            radius: circleRadius
-                        }).addTo(map);
-
-                        let labelText = `📊 ประมาณการ: ${data.hourly_estimate} คัน/ชม.`;
-                        trafficCircle.bindTooltip(labelText, {
-                            permanent: true,
-                            direction: 'center',
-                            className: 'custom-map-label'
-                        });
-
-                        let popupDetail = `
-                            <div style="font-family: sans-serif; color: #111; min-width: 180px;">
-                                <b style="font-size: 14px; display:block; margin-bottom: 5px;">📍 จุดตรวจวัดการจราจร</b>
-                                <hr style="margin: 4px 0; border:0; border-top:1px solid #ccc;">
-                                <b>🚗 ประมาณการรายชั่วโมง:</b> <span style="color:red; font-size:14px;">${data.hourly_estimate} คัน</span><br>
-                                ⏱️ ยอดนับจริง (1 นาที): ${data.total_vehicles_1min} คัน<br>
-                                👤 คนเดินเท้า: ${data.counts.person || 0} คน<br>
-                                <small style="color:gray;">เวลา: ${new Date(data.timestamp).toLocaleString('th-TH')}</small>
-                            </div>
-                        `;
-                        trafficCircle.bindPopup(popupDetail);
-                        mapMarkersLayers.push(trafficCircle);
-                    }
-                });
-            });
+                .catch(error => alert("Firebase Sync Error: " + error.message));
         }
 
         async function runPredictionEngine() {
@@ -490,57 +262,37 @@
             if (video.readyState === video.HAVE_ENOUGH_DATA) {
                 canvas.width = video.videoWidth;
                 canvas.height = video.videoHeight;
-                
                 const predictions = await model.detect(video);
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
                 
                 let currentFrameDetections = [];
-
                 predictions.forEach(p => {
                     if (targetClasses.includes(p.class) && p.score > 0.45) {
                         const [x, y, w, h] = p.bbox;
-                        const cx = x + w / 2;
-                        const cy = y + h / 2;
-                        
-                        currentFrameDetections.push({ class: p.class, cx: cx, cy: cy, bbox: p.bbox });
-
-                        ctx.strokeStyle = "#007aff";
-                        ctx.lineWidth = 4;
-                        ctx.strokeRect(x, y, w, h);
+                        currentFrameDetections.push({ class: p.class, cx: x + w / 2, cy: y + h / 2 });
+                        ctx.strokeStyle = "#0a84ff"; ctx.lineWidth = 3; ctx.strokeRect(x, y, w, h);
                     }
                 });
 
                 if(isTracking) {
                     let now = Date.now();
-
                     currentFrameDetections.forEach(det => {
-                        let matchedTrack = null;
-                        let bestDist = DISTANCE_THRESHOLD;
-
+                        let matchedTrack = null; let bestDist = DISTANCE_THRESHOLD;
                         trackedObjects.forEach(track => {
                             if(track.class === det.class) {
                                 let dist = Math.hypot(det.cx - track.cx, det.cy - track.cy);
-                                if(dist < bestDist) {
-                                    bestDist = dist;
-                                    matchedTrack = track;
-                                }
+                                if(dist < bestDist) { bestDist = dist; matchedTrack = track; }
                             }
                         });
 
                         if (matchedTrack) {
-                            matchedTrack.cx = det.cx;
-                            matchedTrack.cy = det.cy;
-                            matchedTrack.lastSeen = now;
+                            matchedTrack.cx = det.cx; matchedTrack.cy = det.cy; matchedTrack.lastSeen = now;
                         } else {
                             cumulativeCounts[det.class]++;
                             document.getElementById(`total-${det.class}`).innerText = cumulativeCounts[det.class];
-                            
-                            trackedObjects.push({
-                                id: nextObjectId++, class: det.class, cx: det.cx, cy: det.cy, lastSeen: now
-                            });
+                            trackedObjects.push({ id: nextObjectId++, class: det.class, cx: det.cx, cy: det.cy, lastSeen: now });
                         }
                     });
-
                     trackedObjects = trackedObjects.filter(t => (now - t.lastSeen) < TRACK_MAX_AGE);
                 }
             }
