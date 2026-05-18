@@ -106,10 +106,10 @@
             display: block;
         }
 
-        /* --- ส่วนการจัดวางแบบในภาพตัวอย่าง --- */
+        /* --- ส่วนการจัดวางโมดูลกล้อง --- */
         .camera-container {
             width: 100%;
-            height: 38%; /* ครึ่งบนแสดงกล้อง */
+            height: 38%; 
             position: relative;
             background: #000;
         }
@@ -124,7 +124,7 @@
 
         .ui-container {
             width: 100%;
-            height: 62%; /* ครึ่งล่างแสดงยอดสะสมและปุ่มควบคุม */
+            height: 62%; 
             background: #121214;
             border-top: 1px solid #2c2c2e;
             padding: 16px;
@@ -136,11 +136,11 @@
 
         .app-header {
             text-align: center;
-            margin-bottom: 10px;
+            margin-bottom: 8px;
         }
 
         .app-header h1 {
-            font-size: 14px;
+            font-size: 13px;
             text-transform: uppercase;
             letter-spacing: 2px;
             color: var(--text-secondary);
@@ -148,13 +148,26 @@
         }
 
         .app-header p {
-            font-size: 20px;
+            font-size: 18px;
             font-weight: 700;
-            margin: 4px 0 0 0;
+            margin: 4px 0 2px 0;
             letter-spacing: 1px;
         }
 
-        /* ตารางนับยอดสะสม (ตาม Layout รูปตัวอย่าง) */
+        /* สไตล์ของนาฬิกาจับเวลาหน้าแรก */
+        .live-stopwatch {
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--warning);
+            font-family: -apple-system-font, monospace;
+            margin-top: 4px;
+            display: inline-block;
+            background: rgba(255, 159, 10, 0.1);
+            padding: 4px 14px;
+            border-radius: 20px;
+        }
+
+        /* ตารางนับยอดสะสม 6 ประเภท (3 แถว x 2 คอลัมน์) */
         .cumulative-grid {
             display: grid;
             grid-template-columns: repeat(2, 1fr);
@@ -303,6 +316,7 @@
                 <div class="app-header">
                     <h1>Local Object Tracker</h1>
                     <p id="session-status">CUMULATIVE TOTALS</p>
+                    <div id="live-timer" class="live-stopwatch">⏱️ 00:00</div>
                 </div>
 
                 <div class="cumulative-grid">
@@ -310,18 +324,6 @@
                         <div class="cum-box-left">
                             <span class="cum-icon">👤</span>
                             <div class="cum-info"><span class="cum-label">People</span><span class="cum-value" id="total-person">0</span></div>
-                        </div>
-                    </div>
-                    <div class="cum-box">
-                        <div class="cum-box-left">
-                            <span class="cum-icon">🐶</span>
-                            <div class="cum-info"><span class="cum-label">Dogs</span><span class="cum-value" id="total-dog">0</span></div>
-                        </div>
-                    </div>
-                    <div class="cum-box">
-                        <div class="cum-box-left">
-                            <span class="cum-icon">🐱</span>
-                            <div class="cum-info"><span class="cum-label">Cats</span><span class="cum-value" id="total-cat">0</span></div>
                         </div>
                     </div>
                     <div class="cum-box">
@@ -362,7 +364,7 @@
 
         <div id="view-dashboard" class="view-section dashboard-view">
             <h2>📈 รายงานแบบสะสม</h2>
-            <p id="dashboard-timer">เวลาเซสชันปัจจุบัน: 00:00 นาที</p>
+            <p id="dashboard-timer">เวลาเซสชันทั้งหมด: 00:00 นาที</p>
             <div class="chart-container">
                 <canvas id="lineChart"></canvas>
             </div>
@@ -382,10 +384,9 @@
     </div>
 
     <script>
+        // อัปเดตรายการตัดวัตถุหมา (dog) และแมว (cat) ออกถาวร
         const classMapping = {
             'person': { name: 'คน', color: '#0a84ff' },
-            'dog': { name: 'หมา', color: '#ff9f0a' },
-            'cat': { name: 'แมว', color: '#bf5af2' },
             'car': { name: 'รถยนต์', color: '#30d158' },
             'motorcycle': { name: 'รถมอเตอร์ไซค์', color: '#ff453a' },
             'truck': { name: 'รถบรรทุก', color: '#ffd60a' },
@@ -398,23 +399,21 @@
         let isTracking = false;
         let trackingStartTime = null;
         let chartInterval = null;
+        let stopwatchInterval = null; // ตัวแปรคุมนาฬิกาวิ่งสด
         let minuteCounter = 0;
         let myChart = null;
 
-        // ยอดรวมสะสมใหญ่ที่จะบวกเพิ่มขึ้นเรื่อยๆ ตลอดทั้ง Session 
         let cumulativeCounts = {};
         targetClasses.forEach(c => cumulativeCounts[c] = 0);
 
-        // ระบบพล็อตข้อมูลสำหรับ Chart.js
         let chartLabels = ['START'];
         let chartDataPoints = {};
         targetClasses.forEach(c => chartDataPoints[c] = [0]);
 
-        // --- 🧠 ระบบล็อกเป้าและคัดแยกวัตถุ (Object Tracker Engine) ---
         let trackedObjects = []; 
         let nextObjectId = 0;
-        const DISTANCE_THRESHOLD = 90; // ระยะพิกเซลสูงสุดที่ถือว่าเป็นวัตถุตัวเดิม
-        const TRACK_MAX_AGE = 1200;    // เวลาหน่วง (มิลลิวินาที) ก่อนทำลายข้อมูลวัตถุที่หลุดขอบกล้องไปแล้ว
+        const DISTANCE_THRESHOLD = 90; 
+        const TRACK_MAX_AGE = 1200;    
 
         function verifyPassword() {
             if(document.getElementById('password-input').value === "878556") {
@@ -465,7 +464,6 @@
                 trackingStartTime = Date.now();
                 minuteCounter = 0;
                 
-                // ล้างสถิติเก่าเมื่อเริ่มกดรอบใหม่
                 chartLabels = ['START'];
                 targetClasses.forEach(c => {
                     cumulativeCounts[c] = 0;
@@ -478,18 +476,30 @@
                 btn.className = "action-btn btn-stop";
                 document.getElementById('session-status').innerText = "TRACKING SESSION LIVE";
                 
-                // บันทึกจุดสถิติสะสมลงกราฟรายงาน ทุกๆ 1 นาที
+                // 🚀 เปิดระเบิดเวลาให้นาฬิกาวิ่งสดทุกๆ 1 วินาที (1000ms)
+                stopwatchInterval = setInterval(updateLiveStopwatch, 1000);
+                
                 chartInterval = setInterval(recordMinuteSnapshot, 60000);
             } else {
                 isTracking = false;
                 clearInterval(chartInterval);
-                recordMinuteSnapshot(true); // บันทึกข้อมูลนาทีสุดท้ายทันทีที่กดหยุด
+                clearInterval(stopwatchInterval); // หยุดนาฬิกาจับเวลาเมื่อจบเซสชัน
+                
+                recordMinuteSnapshot(true); 
                 
                 btn.innerText = "START SESSION";
                 btn.className = "action-btn btn-start";
                 document.getElementById('session-status').innerText = "SESSION STOPPED";
                 switchTab('dashboard');
             }
+        }
+
+        // ⏱️ ฟังก์ชันขับเคลื่อนนาฬิกาจับเวลาหน้าแรกแบบเรียลไทม์
+        function updateLiveStopwatch() {
+            const diff = Date.now() - trackingStartTime;
+            const mins = String(Math.floor(diff / 60000)).padStart(2, '0');
+            const secs = String(Math.floor((diff % 60000) / 1000)).padStart(2, '0');
+            document.getElementById('live-timer').innerText = `⏱️ ${mins}:${secs}`;
         }
 
         function recordMinuteSnapshot(isFinal = false) {
@@ -523,18 +533,15 @@
                         
                         currentFrameDetections.push({ class: p.class, cx: cx, cy: cy, bbox: p.bbox, score: p.score });
 
-                        // วาดกรอบสี่เหลี่ยมเรียบหรูสไตล์ Cyber Blue
                         ctx.strokeStyle = "#0a84ff";
                         ctx.lineWidth = 4;
                         ctx.strokeRect(x, y, w, h);
                     }
                 });
 
-                // ประมวลผลคัดแยกเฉพาะเมื่อกดยืนยันปุ่ม START SESSION
                 if(isTracking) {
                     let now = Date.now();
 
-                    // ส่วนสำคัญ: เปรียบเทียบตำแหน่งวัตถุเดิมในเฟรมก่อนหน้าเพื่อไม่ให้นับซ้ำ
                     currentFrameDetections.forEach(det => {
                         let matchedTrack = null;
                         let bestDist = DISTANCE_THRESHOLD;
@@ -550,12 +557,10 @@
                         });
 
                         if (matchedTrack) {
-                            // เป็นวัตถุชิ้นเดิม ย้ายจุดพิกัดปัจจุบันตามวัตถุ
                             matchedTrack.cx = det.cx;
                             matchedTrack.cy = det.cy;
                             matchedTrack.lastSeen = now;
                         } else {
-                            // เป็นวัตถุชิ้นใหม่แกะกล่องที่เพิ่งวิ่งเข้ามา -> บวกแต้มสะสมเพิ่มขึ้นถาวร!
                             cumulativeCounts[det.class]++;
                             document.getElementById(`total-${det.class}`).innerText = cumulativeCounts[det.class];
                             
@@ -565,14 +570,12 @@
                         }
                     });
 
-                    // ทำความสะอาดคลังข้อมูล ทำลายวัตถุที่เดินลับตาออกจากขอบกล้องไปแล้วเกินเวลาที่ตั้งไว้
                     trackedObjects = trackedObjects.filter(t => (now - t.lastSeen) < TRACK_MAX_AGE);
                 }
             }
             requestAnimationFrame(runPredictionLoop);
         }
 
-        // --- ส่วนบริการพล็อตกราฟรายงานผลรวมสะสมรายนาที ---
         function initChart() {
             const ctx = document.getElementById('lineChart').getContext('2d');
             const datasets = targetClasses.map(c => {
