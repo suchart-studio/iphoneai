@@ -2,7 +2,7 @@
 <html lang="th">
 <head>
     <meta charset="UTF-8">
-    <title>Global Traffic Map Dashboard (1920x1080 Terminal)</title>
+    <title>Khon Kaen Traffic Map Dashboard (Full Screen 1920x1080)</title>
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -12,10 +12,6 @@
 
     <style>
         :root {
-            --bg-dark: #09090b;
-            --panel-bg: #141416;
-            --text-main: #f4f4f5;
-            --text-muted: #a1a1aa;
             --danger: #ff453a;
             --danger-hover: #ff3b30;
         }
@@ -24,95 +20,65 @@
 
         body, html {
             width: 1920px; height: 1080px;
-            background-color: var(--bg-dark);
-            color: var(--text-main);
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            margin: 0; padding: 0;
             overflow: hidden;
-            display: flex;
+            background-color: #09090b;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
         }
 
-        /* ควบคุมเลย์เอาท์แผงสถิติด้านซ้าย */
-        .sidebar-panel {
-            width: 400px; height: 100%; background: var(--panel-bg);
-            border-right: 1px solid #27272a; padding: 24px;
-            display: flex; flex-direction: column; justify-content: space-between;
-            z-index: 10; box-shadow: 10px 0 30px rgba(0,0,0,0.5);
+        /* ตั้งค่าให้พื้นที่แผนที่ขยายเต็มหน้าจอ 100% */
+        .map-container-fullscreen {
+            width: 100%;
+            height: 100%;
+            position: relative;
         }
-
-        .node-list-container {
-            flex: 1; margin-top: 20px; overflow-y: auto;
-            padding-right: 4px;
+        
+        #map { 
+            width: 100%; 
+            height: 100%; 
         }
-
-        /* ตกแต่งกล่องบันทึกข้อมูลและจัดปุ่มลบให้อยู่มุมขวา */
-        .node-card {
-            background: #1f1f23; border-radius: 10px; padding: 14px; margin-bottom: 12px;
-            border: 1px solid #27272a; position: relative;
-            display: flex; flex-direction: column; justify-content: space-between;
-        }
-
-        /* ปุ่มลบสไตล์มินิมอลรูปถังขยะ */
-        .delete-btn {
-            position: absolute; top: 12px; right: 12px;
-            background: rgba(255, 69, 58, 0.1); border: 1px solid rgba(255, 69, 58, 0.3);
-            color: var(--danger); padding: 6px 10px; border-radius: 6px;
-            cursor: pointer; font-size: 13px; font-weight: bold;
-            transition: all 0.2s ease;
-        }
-        .delete-btn:hover {
-            background: var(--danger); color: #fff;
-            border-color: var(--danger);
-        }
-
-        /* ส่วนแสดงแผนที่หลักฝั่งขวา */
-        .map-container-main {
-            flex: 1; height: 100%; position: relative;
-        }
-        #map { width: 100%; height: 100%; }
 
         /* ตกแต่งเลเบลตัวเลขปริมาณรถบน OpenStreetMap */
         .custom-map-label {
             background: rgba(255, 69, 58, 0.95) !important;
-            border: 1px solid #fff !important; color: #fff !important;
-            font-weight: bold !important; font-size: 14px !important;
-            border-radius: 6px !important; padding: 4px 8px !important;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.5); white-space: nowrap;
+            border: 1px solid #fff !important; 
+            color: #fff !important;
+            font-weight: bold !important; 
+            font-size: 14px !important;
+            border-radius: 6px !important; 
+            padding: 4px 8px !important;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5); 
+            white-space: nowrap;
         }
 
         /* ปุ่มลบภายในกล่อง Pop-up บนแผนที่ */
         .popup-delete-btn {
-            display: block; width: 100%; text-align: center;
-            background: var(--danger); color: white !important; border: none;
-            padding: 6px; border-radius: 4px; font-weight: bold; margin-top: 8px;
-            cursor: pointer; text-decoration: none; font-size: 11px;
+            display: block; 
+            width: 100%; 
+            text-align: center;
+            background: var(--danger); 
+            color: white !important; 
+            border: none;
+            padding: 6px; 
+            border-radius: 4px; 
+            font-weight: bold; 
+            margin-top: 8px;
+            cursor: pointer; 
+            text-decoration: none; 
+            font-size: 11px;
+            transition: background 0.2s ease;
         }
         .popup-delete-btn:hover { background: var(--danger-hover); }
     </style>
 </head>
 <body>
 
-    <div class="sidebar-panel">
-        <div>
-            <h1 style="font-size: 22px; font-weight: 800; letter-spacing: 0.5px;">TRAFFIC MONITOR</h1>
-            <p style="color: var(--text-muted); font-size: 13px; margin-top: 4px;">ระบบประมวลผลเครือข่ายประมาณการจราจร</p>
-            <hr style="border: 0; border-top: 1px solid #27272a; margin: 15px 0;">
-            <h3 style="font-size: 14px; color: var(--text-muted);">📥 LOGGED LIVE SESSIONS</h3>
-            
-            <div class="node-list-container" id="node-log-list">
-                <p style="color: var(--text-muted); font-size: 13px;">รอรับสัญญาณเชื่อมต่อ...</p>
-            </div>
-        </div>
-        <div>
-            <p style="font-size: 11px; color: var(--text-muted); text-align: center;">TERMINAL MATRIX RESOLUTION 1920x1080</p>
-        </div>
-    </div>
-
-    <div class="map-container-main">
+    <div class="map-container-fullscreen">
         <div id="map"></div>
     </div>
 
     <script>
-        // คอนฟิกโครงการ Firebase
+        // คอนฟิกโครงการ Firebase ที่เชื่อมต่อกับระบบเก็บข้อมูลของคุณ
         const firebaseConfig = {
           apiKey: "AIzaSyDMMwciq6QoLSaWK6xfdr0U3ynyahtoaSk",
           authDomain: "studio-a33fe.firebaseapp.com",
@@ -131,22 +97,22 @@
         let mapMarkersLayers = [];
 
         function initDesktopDashboard() {
-            // ตั้งค่าจุดศูนย์กลางเริ่มต้นที่ประเทศไทย
-            map = L.map('map', { zoomControl: true }).setView([13.7563, 100.5018], 6);
+            // 📍 กำหนดพิกัดเริ่มต้นเป็น "ตัวเมืองขอนแก่น" [16.4322, 102.8236] พร้อมระดับ Zoom ที่มองเห็นครอบคลุมรอบเมืองพอดี (Zoom: 13)
+            map = L.map('map', { zoomControl: true }).setView([16.4322, 102.8236], 13);
             
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 attribution: '© OpenStreetMap contributors'
             }).addTo(map);
 
-            // ดักฟังการเปลี่ยนแปลงจาก Firebase แบบ Realtime อัปเดตผังอัตโนมัติเมื่อเกิดการลบข้อมูล
+            // คอยดักฟังข้อมูลใหม่แบบ Realtime เพื่ออัปเดตหมุดจุดจราจรบนแผนที่โดยอัตโนมัติ
             database.ref('traffic_sessions').on('value', (snapshot) => {
                 renderTrafficDataOnMap(snapshot);
             });
         }
 
-        // ฟังก์ชันสั่งลบข้อมูลผ่านรหัส Session Key จาก Firebase
+        // ฟังก์ชันสั่งลบข้อมูลผ่านคีย์ ID จาก Firebase
         function deleteSessionRecord(sessionKey) {
-            if (confirm("⚠️ คุณต้องการลบข้อมูลจุดตรวจวัดนี้ออกจากระบบใช่หรือไม่? ข้อมูลทั้งหมดบนแผนที่จะถูกถอนออกทันที")) {
+            if (confirm("⚠️ คุณต้องการลบข้อมูลจุดตรวจวัดนี้ออกจากฐานข้อมูลใช่หรือไม่? จุดวงกลมบนแผนที่จะถูกลบออกทันที")) {
                 database.ref('traffic_sessions').child(sessionKey).remove()
                     .then(() => {
                         console.log("ลบข้อมูลรหัส " + sessionKey + " สำเร็จ");
@@ -158,72 +124,53 @@
         }
 
         function renderTrafficDataOnMap(snapshot) {
-            // ล้างเลเยอร์เก่าบนแผนที่ออกทั้งหมดเพื่อลบจุดที่ถูกถอดออก
+            // ล้างจุดวงกลมและเลเยอร์เก่าบนแผนที่ทั้งหมดออกก่อนเพื่อป้องกันการซ้อนทับกัน
             mapMarkersLayers.forEach(layer => map.removeLayer(layer));
             mapMarkersLayers = [];
-            
-            const listContainer = document.getElementById('node-log-list');
-            listContainer.innerHTML = ""; // ล้าง Log เก่าบนเมนูฝั่งซ้ายออก
-
-            let hasData = false;
 
             snapshot.forEach((childSnapshot) => {
-                const sessionKey = childSnapshot.key; // ดึงชื่อ ID ประจำกล่องข้อมูลจาก Firebase มาเป็นคีย์อ้างอิงในการลบ
+                const sessionKey = childSnapshot.key;
                 const data = childSnapshot.val();
 
                 if(data.latitude && data.longitude) {
-                    hasData = true;
-
-                    // 1. พล็อตวงกลมความหนาแน่นลงแผนที่
+                    
+                    // คำนวณขนาดรัศมีวงกลมตามความหนาแน่นของอัตราจราจรต่อชั่วโมง
                     let circleRadius = Math.max(45, data.hourly_estimate * 0.2);
+
+                    // 1. สร้างจุดวงกลมแสดงความหนาแน่นจราจรสีแดง
                     let trafficCircle = L.circle([data.latitude, data.longitude], {
-                        color: '#ff453a', fillColor: '#ff453a', fillOpacity: 0.4, radius: circleRadius
+                        color: '#ff453a', 
+                        fillColor: '#ff453a', 
+                        fillOpacity: 0.4, 
+                        radius: circleRadius
                     }).addTo(map);
 
-                    // 2. แปะป้ายบอกยอดปริมาณรถประมาณการรายชั่วโมงถาวรบนแผนที่
+                    // 2. แปะตัวเลขระบุปริมาณรถประมาณการรายชั่วโมงแบบถาวรตรงกลางจุด
                     let labelText = `🚘 ${data.hourly_estimate} คัน/ชม.`;
                     trafficCircle.bindTooltip(labelText, {
-                        permanent: true, direction: 'center', className: 'custom-map-label'
+                        permanent: true, 
+                        direction: 'center', 
+                        className: 'custom-map-label'
                     });
 
-                    // 3. ป๊อปอัปสถิติแบบละเอียดพร้อมฝัง "ปุ่มลบข้อมูลพิกัดนี้" จากหน้าแผนที่โดยตรง
+                    // 3. แนบป๊อปอัปแสดงรายละเอียดเมื่อกดจิ้มที่จุด พร้อม "ปุ่มลบข้อมูลพิกัดนี้ออกจากระบบ"
                     let popupDetail = `
-                        <div style="font-family: sans-serif; color: #111; font-size:12px; min-width:180px;">
+                        <div style="font-family: sans-serif; color: #111; font-size:12px; min-width:185px;">
                             <b style="font-size:14px; color:#ff453a;">📍 จุดบันทึกการจราจร</b><br>
-                            <b>อัตราประมาณการ:</b> ${data.hourly_estimate} คัน/ชม.<br>
+                            <hr style="border:0; border-top:1px solid #ddd; margin:4px 0;">
+                            <b>ประมาณการรายชั่วโมง:</b> <span style="color:#ff453a; font-weight:bold;">${data.hourly_estimate} คัน</span><br>
                             <b>ยอดนับจริง (1 นาที):</b> ${data.total_vehicles_1min} คัน<br>
-                            👥 คนเดินเท้า: ${data.counts.person || 0} คน<br>
-                            <small style="color:gray; display:block; margin-top:2px;">เวลา: ${new Date(data.timestamp).toLocaleString('th-TH')}</small>
-                            <button onclick="deleteSessionRecord('${sessionKey}')" class="popup-delete-btn">🗑️ ลบพิกัดนี้ออกจากระบบ</button>
+                            👥 คนเดินเท้าในพื้นที่: ${data.counts.person || 0} คน<br>
+                            <small style="color:gray; display:block; margin-top:4px;">เวลาบันทึก: ${new Date(data.timestamp).toLocaleString('th-TH')}</small>
+                            <button onclick="deleteSessionRecord('${sessionKey}')" class="popup-delete-btn">🗑️ ลบพิกัดนี้ออกจากคลัง</button>
                         </div>
                     `;
                     trafficCircle.bindPopup(popupDetail);
+                    
+                    // เก็บค่าเลเยอร์ไว้ในอาเรย์เพื่อเตรียมการอัปเดตในรอบถัดไป
                     mapMarkersLayers.push(trafficCircle);
-
-                    // 4. แสดงประวัติกล่องข้อมูลสดลงใน Sidebar ฝั่งซ้าย พร้อมติดตั้ง "ปุ่มลบถังขยะ"
-                    const logCard = document.createElement('div');
-                    logCard.className = 'node-card';
-                    logCard.innerHTML = `
-                        <div style="display:flex; justify-content:space-between; font-size:12px; color:var(--text-muted); width: 80%;">
-                            <span>📍 Node Capture</span>
-                            <span>${new Date(data.timestamp).toLocaleTimeString('th-TH')}</span>
-                        </div>
-                        <div style="font-size:20px; font-weight:bold; color:#ff453a; margin:4px 0;">
-                            ${data.hourly_estimate} <span style="font-size:12px; color:#fff;">คัน/ชม.</span>
-                        </div>
-                        <div style="font-size:11px; color:var(--text-muted);">
-                            พิกัด: ${data.latitude.toFixed(4)}, ${data.longitude.toFixed(4)}
-                        </div>
-                        <button class="delete-btn" onclick="deleteSessionRecord('${sessionKey}')" title="ลบข้อมูลจุดนี้">🗑️</button>
-                    `;
-                    // นำข้อมูลล่าสุดขึ้นมาแสดงด้านบนสุด
-                    listContainer.insertBefore(logCard, listContainer.firstChild);
                 }
             });
-
-            if(!hasData) {
-                listContainer.innerHTML = `<p style="color: var(--text-muted); font-size: 13px;">ยังไม่มีข้อมูลในระบบฐานข้อมูล</p>`;
-            }
         }
 
         window.onload = initDesktopDashboard;
