@@ -3,48 +3,603 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>YOLO Tracker & Counter</title>
-    <link rel="stylesheet" href="style.css">
+    <title>Local AI Object Counter & Tracker</title>
     
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        :root {
+            --bg-color: #000000;
+            --card-bg: #1c1c1e;
+            --text-color: #ffffff;
+            --text-secondary: #8e8e93;
+            --primary: #0a84ff;
+            --success: #30d158;
+            --danger: #ff453a;
+            --warning: #ff9f0a;
+        }
+
+        *, *::before, *::after {
+            box-sizing: border-box;
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Icons", "Helvetica Neue", Helvetica, Arial, sans-serif;
+            overflow: hidden;
+        }
+
+        /* --- หน้าจอ Lock Screen --- */
+        #login-screen {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: #000000;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            padding: 20px;
+        }
+
+        .login-box {
+            width: 100%;
+            max-width: 320px;
+            text-align: center;
+        }
+
+        .login-box h2 {
+            font-size: 22px;
+            margin-bottom: 25px;
+            font-weight: 600;
+        }
+
+        .login-box input {
+            width: 100%;
+            font-size: 28px;
+            padding: 15px;
+            border-radius: 14px;
+            border: none;
+            text-align: center;
+            margin-bottom: 20px;
+            background: var(--card-bg);
+            color: white;
+            letter-spacing: 6px;
+        }
+
+        .login-box button {
+            width: 100%;
+            font-size: 18px;
+            padding: 16px;
+            border-radius: 14px;
+            background: var(--primary);
+            color: white;
+            border: none;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        /* --- โครงสร้างหลักของแอป --- */
+        #app-container {
+            display: none;
+            width: 100%;
+            height: 100%;
+            padding-top: env(safe-area-inset-top);
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+
+        .view-section {
+            display: none;
+            width: 100%;
+            height: calc(100% - 65px); /* หักส่วนแถบแท็บด้านล่างออก */
+            position: relative;
+        }
+
+        .view-section.active {
+            display: block;
+        }
+
+        /* --- หน้าแท็บกล้อง --- */
+        video, canvas {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        #camera-ui {
+            position: absolute;
+            bottom: 10px; left: 0;
+            width: 100%;
+            padding: 0 16px;
+            z-index: 10;
+        }
+
+        .control-panel {
+            background: rgba(28, 28, 30, 0.85);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-radius: 20px;
+            padding: 16px;
+            margin-bottom: 10px;
+        }
+
+        .status-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .timer {
+            color: var(--warning);
+            font-family: monospace;
+            font-size: 16px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+
+        .stat-box {
+            background: rgba(255, 255, 255, 0.08);
+            padding: 8px 4px;
+            border-radius: 10px;
+            text-align: center;
+            font-size: 10px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+        }
+
+        .stat-box span {
+            display: block;
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--text-color);
+            margin-top: 2px;
+        }
+
+        .action-btn {
+            width: 100%;
+            padding: 16px;
+            font-size: 18px;
+            font-weight: 700;
+            border: none;
+            border-radius: 14px;
+            color: white;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .btn-start { background: var(--success); }
+        .btn-stop { background: var(--danger); }
+
+        /* --- หน้าแท็บแดชบอร์ดรายงานผล --- */
+        .dashboard-view {
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        .dashboard-view h2 {
+            margin: 0 0 4px 0;
+            font-size: 24px;
+            font-weight: 700;
+        }
+
+        .dashboard-view p {
+            color: var(--text-secondary);
+            margin: 0 0 20px 0;
+            font-size: 14px;
+        }
+
+        .chart-container {
+            background: var(--card-bg);
+            border-radius: 20px;
+            padding: 16px;
+            margin-bottom: 20px;
+            position: relative;
+            width: 100%;
+        }
+
+        /* --- แถบแท็บเมนูด้านล่าง (iOS Style) --- */
+        .tab-bar {
+            position: fixed;
+            bottom: 0; left: 0; right: 0;
+            height: calc(65px + env(safe-area-inset-bottom));
+            background: #161617;
+            border-top: 0.5px solid #2c2c2e;
+            display: flex;
+            padding-bottom: env(safe-area-inset-bottom);
+            z-index: 100;
+        }
+
+        .tab-item {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: var(--text-secondary);
+            font-size: 11px;
+            font-weight: 500;
+            cursor: pointer;
+            background: none;
+            border: none;
+        }
+
+        .tab-item.active {
+            color: var(--primary);
+        }
+
+        .tab-icon {
+            font-size: 22px;
+            margin-bottom: 3px;
+        }
+    </style>
 </head>
 <body>
 
     <div id="login-screen">
-        <h2>กรุณาใส่รหัสผ่าน</h2>
-        <input type="password" id="pwd" placeholder="******">
-        <button onclick="checkPassword()">เข้าสู่ระบบ</button>
-    </div>
-
-    <div id="app-container">
-        <video id="webcam" autoplay playsinline muted></video>
-        <canvas id="output"></canvas>
-        
-        <div id="ui-layer">
-            <div class="stats-grid" id="stats">
-                </div>
-            <button id="upload-btn">บันทึกข้อมูลขึ้น Firebase</button>
-            <div style="text-align:center; margin-top:10px;">
-                <a href="dashboard.html" style="color:white;">ไปที่หน้า Dashboard</a>
-            </div>
+        <div class="login-box">
+            <h2>🔑 ระบบนับวัตถุเฉพาะภายใน</h2>
+            <input type="password" id="password-input" placeholder="••••••" autofocus inputmode="numeric">
+            <button onclick="verifyPassword()">เข้าสู่ระบบ</button>
         </div>
     </div>
 
-    <script type="module" src="app.js"></script>
-    
+    <div id="app-container">
+        
+        <div id="view-camera" class="view-section active">
+            <video id="webcam" autoplay playsinline muted></video>
+            <canvas id="ai-overlay"></canvas>
+            
+            <div id="camera-ui">
+                <div class="control-panel">
+                    <div class="status-bar">
+                        <div id="engine-status" style="color: var(--text-secondary);">⌛ กำลังโหลดระบบ...</div>
+                        <div class="timer" id="session-timer">⏱️ 00:00</div>
+                    </div>
+                    
+                    <div class="stats-grid">
+                        <div class="stat-box">คน<span id="cnt-person">0</span></div>
+                        <div class="stat-box">หมา<span id="cnt-dog">0</span></div>
+                        <div class="stat-box">แมว<span id="cnt-cat">0</span></div>
+                        <div class="stat-box">รถยนต์<span id="cnt-car">0</span></div>
+                        <div class="stat-box">มอเตอร์ไซค์<span id="cnt-motorcycle">0</span></div>
+                        <div class="stat-box">รถบรรทุก<span id="cnt-truck">0</span></div>
+                        <div class="stat-box">รถบัส<span id="cnt-bus">0</span></div>
+                        <div class="stat-box">จักรยาน<span id="cnt-bicycle">0</span></div>
+                    </div>
+
+                    <button id="master-btn" class="action-btn btn-start" disabled onclick="toggleTracking()">โหลดโมเดล AI สักครู่...</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="view-dashboard" class="view-section dashboard-view">
+            <h2>📊 รายงานผลสะสม</h2>
+            <p id="session-info">ยังไม่มีการบันทึกข้อมูลรอบปัจจุบัน</p>
+            
+            <div class="chart-container">
+                <canvas id="lineChart"></canvas>
+            </div>
+        </div>
+
+        <nav class="tab-bar">
+            <button class="tab-item active" id="tab-cam-btn" onclick="switchTab('camera')">
+                <div class="tab-icon">📷</div>
+                <div>กล้องตรวจจับ</div>
+            </button>
+            <button class="tab-item" id="tab-dash-btn" onclick="switchTab('dashboard')">
+                <div class="tab-icon">📈</div>
+                <div>กราฟสะสม</div>
+            </button>
+        </nav>
+
+    </div>
+
     <script>
-        // ระบบรหัสผ่านอย่างง่าย
-        function checkPassword() {
-            const pwd = document.getElementById('pwd').value;
-            if(pwd === "878556") {
+        // กำหนดคำแปลภาษาไทยและสีเส้นสำหรับแต่ละวัตถุในกราฟ
+        const classMapping = {
+            'person': { name: 'คน', color: '#0a84ff' },
+            'dog': { name: 'หมา', color: '#ff9f0a' },
+            'cat': { name: 'แมว', color: '#bf5af2' },
+            'car': { name: 'รถยนต์', color: '#30d158' },
+            'motorcycle': { name: 'รถมอเตอร์ไซค์', color: '#ff453a' },
+            'truck': { name: 'รถบรรทุก', color: '#ffd60a' },
+            'bus': { name: 'รถบัส', color: '#64d2ff' },
+            'bicycle': { name: 'รถจักรยาน', color: '#00e5ff' }
+        };
+        const targetClasses = Object.keys(classMapping);
+
+        // ตัวแปรควบคุมระบบ
+        let model = null;
+        let isTracking = false; 
+        let videoStream = null;
+        
+        // ข้อมูลสถิติในการนับสะสม
+        let trackingStartTime = null;
+        let timerInterval = null;
+        let minuteLogInterval = null;
+        let minuteCounter = 0;
+
+        // ตัวเก็บข้อมูลดิบสำหรับวาดกราฟ
+        let chartLabels = ['เริ่มนับ'];
+        let chartDataPoints = {};
+        targetClasses.forEach(cls => {
+            chartDataPoints[cls] = [0]; // เริ่มต้นนาทีที่ 0 ทุกอย่างเป็น 0
+        });
+
+        // ตัวแปรพักข้อมูล "จำนวนมากที่สุดที่พบพร้อมกันในนาทีนั้นๆ" เพื่อใช้สรุปยอดสะสมทุกๆ 1 นาที
+        let maxSeenInCurrentMinute = {};
+        function resetMaxSeen() {
+            targetClasses.forEach(cls => maxSeenInCurrentMinute[cls] = 0);
+        }
+        resetMaxSeen();
+
+        // ตัวสะสมยอดรวมสูงสุดของเซสชันปัจจุบัน
+        let accumulatedTotals = {};
+        targetClasses.forEach(cls => accumulatedTotals[cls] = 0);
+
+        let myChart = null;
+
+        // 1. ระบบตรวจสอบรหัสผ่าน
+        function verifyPassword() {
+            const input = document.getElementById('password-input').value;
+            if(input === "878556") {
                 document.getElementById('login-screen').style.display = 'none';
                 document.getElementById('app-container').style.display = 'block';
-                // Trigger event ไปที่ app.js เพื่อเปิดกล้อง
-                window.dispatchEvent(new Event('passwordCorrect'));
+                initEngine();
             } else {
-                alert("รหัสผ่านไม่ถูกต้อง");
+                alert("รหัสผ่านไม่ถูกต้อง 🔒");
             }
+        }
+
+        // สลับแท็บหน้าจอ
+        function switchTab(tabName) {
+            document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.tab-item').forEach(el => el.classList.remove('active'));
+            
+            if(tabName === 'camera') {
+                document.getElementById('view-camera').classList.add('active');
+                document.getElementById('tab-cam-btn').classList.add('active');
+            } else if(tabName === 'dashboard') {
+                document.getElementById('view-dashboard').classList.add('active');
+                document.getElementById('tab-dash-btn').classList.add('active');
+                updateDashboardGraph(); // อัปเดตกราฟทุกครั้งที่เปิดเข้าดู
+            }
+        }
+
+        // 2. เริ่มต้นระบบ โหลดกล้องและโมเดล AI
+        async function initEngine() {
+            const statusText = document.getElementById('engine-status');
+            const masterBtn = document.getElementById('master-btn');
+            
+            try {
+                // เปิดกล้องหลัง iPhone
+                videoStream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: "environment" },
+                    audio: false
+                });
+                document.getElementById('webcam').srcObject = videoStream;
+
+                // โหลด COCO-SSD Model
+                model = await cocoSsd.load();
+                
+                statusText.innerText = "🟢 ระบบพร้อมใช้งาน";
+                statusText.style.color = "var(--success)";
+                masterBtn.innerText = "▶️ เริ่มนับวัตถุ";
+                masterBtn.disabled = false;
+                
+                initChart(); // สร้างกรอบกราฟรอไว้ก่อน
+                runAILoop(); // เริ่ม Loop การส่องภาพล่วงหน้า
+            } catch (err) {
+                console.error(err);
+                statusText.innerText = "🔴 เกิดข้อผิดพลาดในระบบ";
+                statusText.style.color = "var(--danger)";
+                masterBtn.innerText = "ไม่สามารถเปิดกล้องได้";
+            }
+        }
+
+        // 3. ปรับเปลี่ยนสถานะ เริ่มนับ / หยุดนับ
+        function toggleTracking() {
+            const masterBtn = document.getElementById('master-btn');
+            
+            if(!isTracking) {
+                // --- จังหวะกด "เริ่มนับ" ---
+                isTracking = true;
+                trackingStartTime = Date.now();
+                minuteCounter = 0;
+                
+                // รีเซ็ตล้างค่าข้อมูลของรอบเก่าทั้งหมด
+                chartLabels = ['เริ่มนับ'];
+                targetClasses.forEach(cls => {
+                    chartDataPoints[cls] = [0];
+                    accumulatedTotals[cls] = 0;
+                });
+                resetMaxSeen();
+                
+                masterBtn.innerText = "⏹️ หยุดบันทึกและส่งรายงาน";
+                masterBtn.className = "action-btn btn-stop";
+                document.getElementById('session-info').innerText = "กำลังทำการนับแบบ Real-time...";
+
+                // เริ่มนาฬิกาจับเวลาแอป
+                timerInterval = setInterval(updateTimer, 1000);
+                
+                // เริ่มระบบเก็บสถิติสรุปผล "รายนาที" บันทึกแต้มสะสม
+                minuteLogInterval = setInterval(logMinuteData, 60000); 
+
+            } else {
+                // --- จังหวะกด "หยุดนับ" ---
+                isTracking = false;
+                clearInterval(timerInterval);
+                clearInterval(minuteLogInterval);
+                
+                // เก็บบันทึกข้อมูลนาทีสุดท้าย ณ จังหวะกดหยุดทันที (ไม่ต้องรบกวนให้ครบนาทีเต็ม)
+                logMinuteData(true); 
+
+                masterBtn.innerText = "▶️ เริ่มนับรอบใหม่";
+                masterBtn.className = "action-btn btn-start";
+                
+                document.getElementById('session-info').innerText = `📊 บันทึกเสร็จสิ้น! สรุปผลรวมเวลาทั้งหมด ${document.getElementById('session-timer').innerText.replace('⏱️ ', '')}`;
+                
+                // สลับหน้าไปที่หน้ากราฟรายงานให้ผู้ใช้เห็นทันทีหลังจากกดหยุด
+                switchTab('dashboard');
+            }
+        }
+
+        // ฟังก์ชันอัปเดตเวลาบนหน้าจอ
+        function updateTimer() {
+            const diff = Date.now() - trackingStartTime;
+            const mins = String(Math.floor(diff / 60000)).padStart(2, '0');
+            const secs = String(Math.floor((diff % 60000) / 1000)).padStart(2, '0');
+            document.getElementById('session-timer').innerText = `⏱️ ${mins}:${secs}`;
+        }
+
+        // 4. ฟังก์ชันบันทึกและคำนวณข้อมูลแบบสะสมรายนาที
+        function logMinuteData(isFinal = false) {
+            minuteCounter++;
+            let labelText = isFinal ? "จบการนับ" : `นาทีที่ ${minuteCounter}`;
+            chartLabels.push(labelText);
+
+            targetClasses.forEach(cls => {
+                // ดึงค่าจำนวนมากที่สุดที่ส่องเจอใน 1 นาทีก่อนหน้า มาสะสมเข้าไปในยอดรวมใหญ่
+                accumulatedTotals[cls] += maxSeenInCurrentMinute[cls];
+                
+                // เอาค่าสะสมล่าสุดใส่ลงอาร์เรย์เพื่อไปพล็อตจุดในกราฟเส้น
+                chartDataPoints[cls].push(accumulatedTotals[cls]);
+            });
+
+            // รีเซ็ตค่าสแกนสูงสุดของนาทีถัดไป
+            resetMaxSeen();
+            
+            if(!isFinal) {
+                // อัปเดตกราฟเบื้องหลังเงียบๆ เผื่อกรณีผู้ใช้สลับไปเปิดดูระหว่างทาง
+                updateDashboardGraph();
+            }
+        }
+
+        // 5. ป้อนข้อมูลภาพเข้า AI ประมวลผลแบบเฟรมต่อเฟรม (รันตลอดเวลาเพื่อแสดง UI กรอบเหลี่ยม)
+        async function runAILoop() {
+            const video = document.getElementById('webcam');
+            const canvas = document.getElementById('ai-overlay');
+            const ctx = canvas.getContext('2d');
+
+            if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                
+                // สแกนภาพหาวัตถุ
+                const predictions = await model.detect(video);
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                
+                // ตัวนับชั่วคราวเฉพาะเฟรมนี้
+                let frameCounts = {};
+                targetClasses.forEach(c => frameCounts[c] = 0);
+
+                predictions.forEach(prediction => {
+                    if (targetClasses.includes(prediction.class) && prediction.score > 0.5) {
+                        frameCounts[prediction.class]++;
+                        
+                        // วาด Bounding Box สไตล์ Apple Cyberpunk Blue
+                        const [x, y, width, height] = prediction.bbox;
+                        ctx.strokeStyle = "#0a84ff";
+                        ctx.lineWidth = 4;
+                        ctx.strokeRect(x, y, width, height);
+                        
+                        // พิมพ์ชื่อป้ายกำกับภาษาไทย
+                        ctx.fillStyle = "#0a84ff";
+                        ctx.fillRect(x, y - 24, width > 150 ? width : 150, 24);
+                        ctx.fillStyle = "#ffffff";
+                        ctx.font = "bold 16px -apple-system";
+                        ctx.fillText(` ${classMapping[prediction.class].name} (${Math.round(prediction.score * 100)}%)`, x + 4, y - 6);
+                    }
+                });
+
+                // อัปเดตตัวเลข Real-time บนหน้าจอเฉพาะตัวคลาสที่กำหนด
+                targetClasses.forEach(cls => {
+                    document.getElementById(`cnt-${cls}`).innerText = frameCounts[cls];
+                    
+                    // ถ้ากำลังอยู่ในช่วงกด "เริ่มนับ" ให้คอยดักจับค่าสูงสุดพร้อมกันในนาทีนั้นๆ
+                    if(isTracking) {
+                        if(frameCounts[cls] > maxSeenInCurrentMinute[cls]) {
+                            maxSeenInCurrentMinute[cls] = frameCounts[cls];
+                        }
+                    }
+                });
+            }
+            // วนลูปทำงานเฟรมถัดไปทันที
+            requestAnimationFrame(runAILoop);
+        }
+
+        // 6. ส่วนการจัดการ Chart.js (กราฟเส้นแสดงจำนวนสะสมเทียบกับเวลา)
+        function initChart() {
+            const ctx = document.getElementById('lineChart').getContext('2d');
+            
+            // เตรียม Datasets สำหรับวาดกราฟเส้นแยกตามคลาสสี
+            const datasets = targetClasses.map(cls => {
+                return {
+                    label: classMapping[cls].name,
+                    data: chartDataPoints[cls],
+                    borderColor: classMapping[cls].color,
+                    backgroundColor: classMapping[cls].color + "1A", // เติมความโปร่งแสง 10%
+                    borderWidth: 3,
+                    pointRadius: 4,
+                    tension: 0.2 // เส้นโค้งมนเรียบหรูสไตล์ iOS
+                };
+            });
+
+            myChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: chartLabels,
+                    datasets: datasets
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            grid: { color: '#2c2c2e' },
+                            ticks: { color: '#8e8e93', stepSize: 1 }
+                        },
+                        x: {
+                            grid: { color: '#2c2c2e' },
+                            ticks: { color: '#8e8e93' }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: { color: '#ffffff', font: { size: 11 }, padding: 12 }
+                        }
+                    }
+                }
+            });
+        }
+
+        // ฟังก์ชันสั่งให้กราฟดึงชุดข้อมูลปัจจุบันไปวาดใหม่บนหน้าจอ
+        function updateDashboardGraph() {
+            if(!myChart) return;
+            myChart.data.labels = chartLabels;
+            targetClasses.forEach((cls, index) => {
+                myChart.data.datasets[index].data = chartDataPoints[cls];
+            });
+            myChart.update();
         }
     </script>
 </body>
