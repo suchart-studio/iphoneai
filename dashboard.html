@@ -16,6 +16,8 @@
             --panel-bg: #141416;
             --text-main: #f4f4f5;
             --text-muted: #a1a1aa;
+            --danger: #ff453a;
+            --danger-hover: #ff3b30;
         }
 
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -39,11 +41,27 @@
 
         .node-list-container {
             flex: 1; margin-top: 20px; overflow-y: auto;
+            padding-right: 4px;
         }
 
+        /* ตกแต่งกล่องบันทึกข้อมูลและจัดปุ่มลบให้อยู่มุมขวา */
         .node-card {
-            background: #1f1f23; border-radius: 10px; padding: 12px; margin-bottom: 10px;
-            border: 1px solid #27272a;
+            background: #1f1f23; border-radius: 10px; padding: 14px; margin-bottom: 12px;
+            border: 1px solid #27272a; position: relative;
+            display: flex; flex-direction: column; justify-content: space-between;
+        }
+
+        /* ปุ่มลบสไตล์มินิมอลรูปถังขยะ */
+        .delete-btn {
+            position: absolute; top: 12px; right: 12px;
+            background: rgba(255, 69, 58, 0.1); border: 1px solid rgba(255, 69, 58, 0.3);
+            color: var(--danger); padding: 6px 10px; border-radius: 6px;
+            cursor: pointer; font-size: 13px; font-weight: bold;
+            transition: all 0.2s ease;
+        }
+        .delete-btn:hover {
+            background: var(--danger); color: #fff;
+            border-color: var(--danger);
         }
 
         /* ส่วนแสดงแผนที่หลักฝั่งขวา */
@@ -60,6 +78,15 @@
             border-radius: 6px !important; padding: 4px 8px !important;
             box-shadow: 0 4px 12px rgba(0,0,0,0.5); white-space: nowrap;
         }
+
+        /* ปุ่มลบภายในกล่อง Pop-up บนแผนที่ */
+        .popup-delete-btn {
+            display: block; width: 100%; text-align: center;
+            background: var(--danger); color: white !important; border: none;
+            padding: 6px; border-radius: 4px; font-weight: bold; margin-top: 8px;
+            cursor: pointer; text-decoration: none; font-size: 11px;
+        }
+        .popup-delete-btn:hover { background: var(--danger-hover); }
     </style>
 </head>
 <body>
@@ -111,24 +138,39 @@
                 attribution: '© OpenStreetMap contributors'
             }).addTo(map);
 
-            // ใช้ .on('value') เพื่อดักฟังข้อมูลใหม่แบบ Realtime ทันทีที่มีการบันทึกจาก iPhone
+            // ดักฟังการเปลี่ยนแปลงจาก Firebase แบบ Realtime อัปเดตผังอัตโนมัติเมื่อเกิดการลบข้อมูล
             database.ref('traffic_sessions').on('value', (snapshot) => {
                 renderTrafficDataOnMap(snapshot);
             });
         }
 
+        // ฟังก์ชันสั่งลบข้อมูลผ่านรหัส Session Key จาก Firebase
+        function deleteSessionRecord(sessionKey) {
+            if (confirm("⚠️ คุณต้องการลบข้อมูลจุดตรวจวัดนี้ออกจากระบบใช่หรือไม่? ข้อมูลทั้งหมดบนแผนที่จะถูกถอนออกทันที")) {
+                database.ref('traffic_sessions').child(sessionKey).remove()
+                    .then(() => {
+                        console.log("ลบข้อมูลรหัส " + sessionKey + " สำเร็จ");
+                    })
+                    .catch((error) => {
+                        alert("ไม่สามารถลบข้อมูลได้: " + error.message);
+                    });
+            }
+        }
+
         function renderTrafficDataOnMap(snapshot) {
-            // ล้างเลเยอร์เก่าบนแผนที่ออกทั้งหมด
+            // ล้างเลเยอร์เก่าบนแผนที่ออกทั้งหมดเพื่อลบจุดที่ถูกถอดออก
             mapMarkersLayers.forEach(layer => map.removeLayer(layer));
             mapMarkersLayers = [];
             
             const listContainer = document.getElementById('node-log-list');
-            listContainer.innerHTML = ""; // ล้าง Log เก่าออก
+            listContainer.innerHTML = ""; // ล้าง Log เก่าบนเมนูฝั่งซ้ายออก
 
             let hasData = false;
 
             snapshot.forEach((childSnapshot) => {
+                const sessionKey = childSnapshot.key; // ดึงชื่อ ID ประจำกล่องข้อมูลจาก Firebase มาเป็นคีย์อ้างอิงในการลบ
                 const data = childSnapshot.val();
+
                 if(data.latitude && data.longitude) {
                     hasData = true;
 
@@ -144,24 +186,25 @@
                         permanent: true, direction: 'center', className: 'custom-map-label'
                     });
 
-                    // 3. ป๊อปอัปสถิติแบบละเอียดเมื่อคลิกที่วงกลม
+                    // 3. ป๊อปอัปสถิติแบบละเอียดพร้อมฝัง "ปุ่มลบข้อมูลพิกัดนี้" จากหน้าแผนที่โดยตรง
                     let popupDetail = `
                         <div style="font-family: sans-serif; color: #111; font-size:12px; min-width:180px;">
                             <b style="font-size:14px; color:#ff453a;">📍 จุดบันทึกการจราจร</b><br>
                             <b>อัตราประมาณการ:</b> ${data.hourly_estimate} คัน/ชม.<br>
                             <b>ยอดนับจริง (1 นาที):</b> ${data.total_vehicles_1min} คัน<br>
                             👥 คนเดินเท้า: ${data.counts.person || 0} คน<br>
-                            <small style="color:gray;">เวลา: ${new Date(data.timestamp).toLocaleString('th-TH')}</small>
+                            <small style="color:gray; display:block; margin-top:2px;">เวลา: ${new Date(data.timestamp).toLocaleString('th-TH')}</small>
+                            <button onclick="deleteSessionRecord('${sessionKey}')" class="popup-delete-btn">🗑️ ลบพิกัดนี้ออกจากระบบ</button>
                         </div>
                     `;
                     trafficCircle.bindPopup(popupDetail);
                     mapMarkersLayers.push(trafficCircle);
 
-                    // 4. แสดงประวัติกล่องข้อมูลสดลงใน Sidebar ฝั่งซ้าย
+                    // 4. แสดงประวัติกล่องข้อมูลสดลงใน Sidebar ฝั่งซ้าย พร้อมติดตั้ง "ปุ่มลบถังขยะ"
                     const logCard = document.createElement('div');
                     logCard.className = 'node-card';
                     logCard.innerHTML = `
-                        <div style="display:flex; justify-content:space-between; font-size:12px; color:var(--text-muted);">
+                        <div style="display:flex; justify-content:space-between; font-size:12px; color:var(--text-muted); width: 80%;">
                             <span>📍 Node Capture</span>
                             <span>${new Date(data.timestamp).toLocaleTimeString('th-TH')}</span>
                         </div>
@@ -171,12 +214,10 @@
                         <div style="font-size:11px; color:var(--text-muted);">
                             พิกัด: ${data.latitude.toFixed(4)}, ${data.longitude.toFixed(4)}
                         </div>
+                        <button class="delete-btn" onclick="deleteSessionRecord('${sessionKey}')" title="ลบข้อมูลจุดนี้">🗑️</button>
                     `;
                     // นำข้อมูลล่าสุดขึ้นมาแสดงด้านบนสุด
                     listContainer.insertBefore(logCard, listContainer.firstChild);
-
-                    // ปรับตำแหน่งแผนที่ให้แพลนไปยังจุดล่าสุดที่มีการอัปเดตเข้ามา
-                    map.setView([data.latitude, data.longitude], 15);
                 }
             });
 
