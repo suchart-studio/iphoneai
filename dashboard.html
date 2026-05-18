@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <title>Global Traffic Map Dashboard (1920x1080 Terminal)</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
+
+    <style>
+        :root {
+            --bg-dark: #09090b;
+            --panel-bg: #141416;
+            --text-main: #f4f4f5;
+            --text-muted: #a1a1aa;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body, html {
+            width: 1920px; height: 1080px;
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            overflow: hidden;
+            display: flex;
+        }
+
+        /* ควบคุมเลย์เอาท์แผงสถิติด้านซ้าย */
+        .sidebar-panel {
+            width: 400px; height: 100%; background: var(--panel-bg);
+            border-right: 1px solid #27272a; padding: 24px;
+            display: flex; flex-direction: column; justify-content: space-between;
+            z-index: 10; box-shadow: 10px 0 30px rgba(0,0,0,0.5);
+        }
+
+        .node-list-container {
+            flex: 1; margin-top: 20px; overflow-y: auto;
+        }
+
+        .node-card {
+            background: #1f1f23; border-radius: 10px; padding: 12px; margin-bottom: 10px;
+            border: 1px solid #27272a;
+        }
+
+        /* ส่วนแสดงแผนที่หลักฝั่งขวา */
+        .map-container-main {
+            flex: 1; height: 100%; position: relative;
+        }
+        #map { width: 100%; height: 100%; }
+
+        /* ตกแต่งเลเบลตัวเลขปริมาณรถบน OpenStreetMap */
+        .custom-map-label {
+            background: rgba(255, 69, 58, 0.95) !important;
+            border: 1px solid #fff !important; color: #fff !important;
+            font-weight: bold !important; font-size: 14px !important;
+            border-radius: 6px !important; padding: 4px 8px !important;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5); white-space: nowrap;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="sidebar-panel">
+        <div>
+            <h1 style="font-size: 22px; font-weight: 800; letter-spacing: 0.5px;">TRAFFIC MONITOR</h1>
+            <p style="color: var(--text-muted); font-size: 13px; margin-top: 4px;">ระบบประมวลผลเครือข่ายประมาณการจราจร</p>
+            <hr style="border: 0; border-top: 1px solid #27272a; margin: 15px 0;">
+            <h3 style="font-size: 14px; color: var(--text-muted);">📥 LOGGED LIVE SESSIONS</h3>
+            
+            <div class="node-list-container" id="node-log-list">
+                <p style="color: var(--text-muted); font-size: 13px;">รอรับสัญญาณเชื่อมต่อ...</p>
+            </div>
+        </div>
+        <div>
+            <p style="font-size: 11px; color: var(--text-muted); text-align: center;">TERMINAL MATRIX RESOLUTION 1920x1080</p>
+        </div>
+    </div>
+
+    <div class="map-container-main">
+        <div id="map"></div>
+    </div>
+
+    <script>
+        // คอนฟิกโครงการ Firebase
+        const firebaseConfig = {
+          apiKey: "AIzaSyDMMwciq6QoLSaWK6xfdr0U3ynyahtoaSk",
+          authDomain: "studio-a33fe.firebaseapp.com",
+          databaseURL: "https://studio-a33fe-default-rtdb.asia-southeast1.firebasedatabase.app",
+          projectId: "studio-a33fe",
+          storageBucket: "studio-a33fe.firebasestorage.app",
+          messagingSenderId: "753539109404",
+          appId: "1:753539109404:web:e3ea4214849d4bd7e645d9",
+          measurementId: "G-P7Q5TTLS5Y"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+
+        let map = null;
+        let mapMarkersLayers = [];
+
+        function initDesktopDashboard() {
+            // ตั้งค่าจุดศูนย์กลางเริ่มต้นที่ประเทศไทย
+            map = L.map('map', { zoomControl: true }).setView([13.7563, 100.5018], 6);
+            
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors'
+            }).addTo(map);
+
+            // ใช้ .on('value') เพื่อดักฟังข้อมูลใหม่แบบ Realtime ทันทีที่มีการบันทึกจาก iPhone
+            database.ref('traffic_sessions').on('value', (snapshot) => {
+                renderTrafficDataOnMap(snapshot);
+            });
+        }
+
+        function renderTrafficDataOnMap(snapshot) {
+            // ล้างเลเยอร์เก่าบนแผนที่ออกทั้งหมด
+            mapMarkersLayers.forEach(layer => map.removeLayer(layer));
+            mapMarkersLayers = [];
+            
+            const listContainer = document.getElementById('node-log-list');
+            listContainer.innerHTML = ""; // ล้าง Log เก่าออก
+
+            let hasData = false;
+
+            snapshot.forEach((childSnapshot) => {
+                const data = childSnapshot.val();
+                if(data.latitude && data.longitude) {
+                    hasData = true;
+
+                    // 1. พล็อตวงกลมความหนาแน่นลงแผนที่
+                    let circleRadius = Math.max(45, data.hourly_estimate * 0.2);
+                    let trafficCircle = L.circle([data.latitude, data.longitude], {
+                        color: '#ff453a', fillColor: '#ff453a', fillOpacity: 0.4, radius: circleRadius
+                    }).addTo(map);
+
+                    // 2. แปะป้ายบอกยอดปริมาณรถประมาณการรายชั่วโมงถาวรบนแผนที่
+                    let labelText = `🚘 ${data.hourly_estimate} คัน/ชม.`;
+                    trafficCircle.bindTooltip(labelText, {
+                        permanent: true, direction: 'center', className: 'custom-map-label'
+                    });
+
+                    // 3. ป๊อปอัปสถิติแบบละเอียดเมื่อคลิกที่วงกลม
+                    let popupDetail = `
+                        <div style="font-family: sans-serif; color: #111; font-size:12px; min-width:180px;">
+                            <b style="font-size:14px; color:#ff453a;">📍 จุดบันทึกการจราจร</b><br>
+                            <b>อัตราประมาณการ:</b> ${data.hourly_estimate} คัน/ชม.<br>
+                            <b>ยอดนับจริง (1 นาที):</b> ${data.total_vehicles_1min} คัน<br>
+                            👥 คนเดินเท้า: ${data.counts.person || 0} คน<br>
+                            <small style="color:gray;">เวลา: ${new Date(data.timestamp).toLocaleString('th-TH')}</small>
+                        </div>
+                    `;
+                    trafficCircle.bindPopup(popupDetail);
+                    mapMarkersLayers.push(trafficCircle);
+
+                    // 4. แสดงประวัติกล่องข้อมูลสดลงใน Sidebar ฝั่งซ้าย
+                    const logCard = document.createElement('div');
+                    logCard.className = 'node-card';
+                    logCard.innerHTML = `
+                        <div style="display:flex; justify-content:space-between; font-size:12px; color:var(--text-muted);">
+                            <span>📍 Node Capture</span>
+                            <span>${new Date(data.timestamp).toLocaleTimeString('th-TH')}</span>
+                        </div>
+                        <div style="font-size:20px; font-weight:bold; color:#ff453a; margin:4px 0;">
+                            ${data.hourly_estimate} <span style="font-size:12px; color:#fff;">คัน/ชม.</span>
+                        </div>
+                        <div style="font-size:11px; color:var(--text-muted);">
+                            พิกัด: ${data.latitude.toFixed(4)}, ${data.longitude.toFixed(4)}
+                        </div>
+                    `;
+                    // นำข้อมูลล่าสุดขึ้นมาแสดงด้านบนสุด
+                    listContainer.insertBefore(logCard, listContainer.firstChild);
+
+                    // ปรับตำแหน่งแผนที่ให้แพลนไปยังจุดล่าสุดที่มีการอัปเดตเข้ามา
+                    map.setView([data.latitude, data.longitude], 15);
+                }
+            });
+
+            if(!hasData) {
+                listContainer.innerHTML = `<p style="color: var(--text-muted); font-size: 13px;">ยังไม่มีข้อมูลในระบบฐานข้อมูล</p>`;
+            }
+        }
+
+        window.onload = initDesktopDashboard;
+    </script>
+</body>
+</html>
