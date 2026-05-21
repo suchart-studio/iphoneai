@@ -2,83 +2,29 @@
 <html lang="th">
 <head>
     <meta charset="UTF-8">
-    <title>Khon Kaen Traffic Map Dashboard (Full Screen 1920x1080)</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Live Traffic Map Dashboard (Responsive)</title>
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
 
     <style>
-        :root {
-            --danger: #ff453a;
-            --danger-hover: #ff3b30;
-        }
-
         * { box-sizing: border-box; margin: 0; padding: 0; }
-
-        body, html {
-            width: 1920px; height: 1080px;
-            margin: 0; padding: 0;
-            overflow: hidden;
-            background-color: #09090b;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-        }
-
-        /* ตั้งค่าให้พื้นที่แผนที่ขยายเต็มหน้าจอ 100% */
-        .map-container-fullscreen {
-            width: 100%;
-            height: 100%;
-            position: relative;
-        }
-        
-        #map { 
-            width: 100%; 
-            height: 100%; 
-        }
-
-        /* ตกแต่งเลเบลตัวเลขปริมาณรถบน OpenStreetMap */
+        body, html { width: 100%; height: 100%; background-color: #09090b; overflow: hidden; font-family: -apple-system, sans-serif; }
+        #map { width: 100%; height: 100%; }
         .custom-map-label {
-            background: rgba(255, 69, 58, 0.95) !important;
-            border: 1px solid #fff !important; 
-            color: #fff !important;
-            font-weight: bold !important; 
-            font-size: 14px !important;
-            border-radius: 6px !important; 
-            padding: 4px 8px !important;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.5); 
-            white-space: nowrap;
+            background: rgba(255, 69, 58, 0.95) !important; border: 1px solid #fff !important; 
+            color: #fff !important; font-weight: bold !important; font-size: 12px !important;
+            border-radius: 6px !important; padding: 3px 6px !important; box-shadow: 0 4px 12px rgba(0,0,0,0.3);
         }
-
-        /* ปุ่มลบภายในกล่อง Pop-up บนแผนที่ */
-        .popup-delete-btn {
-            display: block; 
-            width: 100%; 
-            text-align: center;
-            background: var(--danger); 
-            color: white !important; 
-            border: none;
-            padding: 6px; 
-            border-radius: 4px; 
-            font-weight: bold; 
-            margin-top: 8px;
-            cursor: pointer; 
-            text-decoration: none; 
-            font-size: 11px;
-            transition: background 0.2s ease;
-        }
-        .popup-delete-btn:hover { background: var(--danger-hover); }
     </style>
 </head>
 <body>
-
-    <div class="map-container-fullscreen">
-        <div id="map"></div>
-    </div>
+    <div id="map"></div>
 
     <script>
-        // คอนฟิกโครงการ Firebase ที่เชื่อมต่อกับระบบเก็บข้อมูลของคุณ
         const firebaseConfig = {
           apiKey: "AIzaSyDMMwciq6QoLSaWK6xfdr0U3ynyahtoaSk",
           authDomain: "studio-a33fe.firebaseapp.com",
@@ -92,88 +38,39 @@
 
         firebase.initializeApp(firebaseConfig);
         const database = firebase.database();
-
-        let map = null;
+        let map = L.map('map').setView([16.4322, 102.8236], 13); // ศูนย์กลางขอนแก่น
         let mapMarkersLayers = [];
 
-        function initDesktopDashboard() {
-            // 📍 กำหนดพิกัดเริ่มต้นเป็น "ตัวเมืองขอนแก่น" [16.4322, 102.8236] พร้อมระดับ Zoom ที่มองเห็นครอบคลุมรอบเมืองพอดี (Zoom: 13)
-            map = L.map('map', { zoomControl: true }).setView([16.4322, 102.8236], 13);
-            
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '© OpenStreetMap contributors'
-            }).addTo(map);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(map);
 
-            // คอยดักฟังข้อมูลใหม่แบบ Realtime เพื่ออัปเดตหมุดจุดจราจรบนแผนที่โดยอัตโนมัติ
-            database.ref('traffic_sessions').on('value', (snapshot) => {
-                renderTrafficDataOnMap(snapshot);
-            });
-        }
-
-        // ฟังก์ชันสั่งลบข้อมูลผ่านคีย์ ID จาก Firebase
-        function deleteSessionRecord(sessionKey) {
-            if (confirm("⚠️ คุณต้องการลบข้อมูลจุดตรวจวัดนี้ออกจากฐานข้อมูลใช่หรือไม่? จุดวงกลมบนแผนที่จะถูกลบออกทันที")) {
-                database.ref('traffic_sessions').child(sessionKey).remove()
-                    .then(() => {
-                        console.log("ลบข้อมูลรหัส " + sessionKey + " สำเร็จ");
-                    })
-                    .catch((error) => {
-                        alert("ไม่สามารถลบข้อมูลได้: " + error.message);
-                    });
-            }
-        }
-
-        function renderTrafficDataOnMap(snapshot) {
-            // ล้างจุดวงกลมและเลเยอร์เก่าบนแผนที่ทั้งหมดออกก่อนเพื่อป้องกันการซ้อนทับกัน
+        database.ref('traffic_sessions').on('value', (snapshot) => {
             mapMarkersLayers.forEach(layer => map.removeLayer(layer));
             mapMarkersLayers = [];
 
             snapshot.forEach((childSnapshot) => {
-                const sessionKey = childSnapshot.key;
                 const data = childSnapshot.val();
-
                 if(data.latitude && data.longitude) {
-                    
-                    // คำนวณขนาดรัศมีวงกลมตามความหนาแน่นของอัตราจราจรต่อชั่วโมง
-                    let circleRadius = Math.max(45, data.hourly_estimate * 0.2);
-
-                    // 1. สร้างจุดวงกลมแสดงความหนาแน่นจราจรสีแดง
+                    let circleRadius = Math.max(30, data.hourly_estimate * 0.2);
                     let trafficCircle = L.circle([data.latitude, data.longitude], {
-                        color: '#ff453a', 
-                        fillColor: '#ff453a', 
-                        fillOpacity: 0.4, 
-                        radius: circleRadius
+                        color: '#ff453a', fillColor: '#ff453a', fillOpacity: 0.4, radius: circleRadius
                     }).addTo(map);
 
-                    // 2. แปะตัวเลขระบุปริมาณรถประมาณการรายชั่วโมงแบบถาวรตรงกลางจุด
-                    let labelText = `🚘 ${data.hourly_estimate} คัน/ชม.`;
-                    trafficCircle.bindTooltip(labelText, {
-                        permanent: true, 
-                        direction: 'center', 
-                        className: 'custom-map-label'
-                    });
+                    trafficCircle.bindTooltip(`🚘 ${data.hourly_estimate} คัน/ชม.`, { permanent: true, direction: 'center', className: 'custom-map-label' });
 
-                    // 3. แนบป๊อปอัปแสดงรายละเอียดเมื่อกดจิ้มที่จุด พร้อม "ปุ่มลบข้อมูลพิกัดนี้ออกจากระบบ"
                     let popupDetail = `
-                        <div style="font-family: sans-serif; color: #111; font-size:12px; min-width:185px;">
-                            <b style="font-size:14px; color:#ff453a;">📍 จุดบันทึกการจราจร</b><br>
-                            <hr style="border:0; border-top:1px solid #ddd; margin:4px 0;">
-                            <b>ประมาณการรายชั่วโมง:</b> <span style="color:#ff453a; font-weight:bold;">${data.hourly_estimate} คัน</span><br>
-                            <b>ยอดนับจริง (1 นาที):</b> ${data.total_vehicles_1min} คัน<br>
-                            👥 คนเดินเท้าในพื้นที่: ${data.counts.person || 0} คน<br>
-                            <small style="color:gray; display:block; margin-top:4px;">เวลาบันทึก: ${new Date(data.timestamp).toLocaleString('th-TH')}</small>
-                            <button onclick="deleteSessionRecord('${sessionKey}')" class="popup-delete-btn">🗑️ ลบพิกัดนี้ออกจากคลัง</button>
+                        <div style="font-family:sans-serif; color:#111; font-size:12px; min-width:150px;">
+                            <b style="color:#ff453a;">📍 จุดบันทึกการจราจร</b><br>
+                            <b>ประมาณการ:</b> ${data.hourly_estimate} คัน/ชม.<br>
+                            <b>นับจริง (1 นาที):</b> ${data.total_vehicles_1min} คัน<br>
+                            👥 คนเดินเท้า: ${data.counts.person || 0} คน<br>
+                            <small style="color:gray;">${new Date(data.timestamp).toLocaleString('th-TH')}</small>
                         </div>
                     `;
                     trafficCircle.bindPopup(popupDetail);
-                    
-                    // เก็บค่าเลเยอร์ไว้ในอาเรย์เพื่อเตรียมการอัปเดตในรอบถัดไป
                     mapMarkersLayers.push(trafficCircle);
                 }
             });
-        }
-
-        window.onload = initDesktopDashboard;
+        });
     </script>
 </body>
 </html>
