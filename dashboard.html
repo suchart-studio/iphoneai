@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Live Traffic Map Dashboard (Radar Pulse Effect)</title>
+    <title>Live Traffic Map Dashboard (Dynamic Radar Scale)</title>
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -17,16 +17,16 @@
         #map { width: 100%; height: 100%; }
 
         /* =================================================== */
-        /* 📡 ชุดคำสั่ง CSS สำหรับสร้างเอฟเฟกต์เรดาร์สะท้อน (Radar Animation) */
+        /* 📡 ชุดคำสั่ง CSS เรดาร์ไดนามิก ขยายตามตัวแปรที่ส่งมาจาก JS */
         /* =================================================== */
         .radar-container {
             position: relative;
             width: 20px;
             height: 20px;
-            transform: translate(-50%, -50%); /* จัดตำแหน่งให้อยู่กึ่งกลางพิกัดเป๊ะๆ */
+            transform: translate(-50%, -50%);
         }
 
-        /* จุดไข่แดงศูนย์กลาง (Core Node) */
+        /* จุดแกนกลางคงที่ */
         .radar-center {
             position: absolute;
             top: 5px; left: 5px;
@@ -37,34 +37,38 @@
             box-shadow: 0 0 10px #ff453a;
         }
 
-        /* วงแหวนคลื่นเรดาร์ชั้นที่ 1 และชั้นที่ 2 */
+        /* วงแหวนเรดาร์กระจายคลื่น: ใช้ตัวแปร --radar-size ที่คำนวณแบบแปรผัน */
         .radar-pulse-1, .radar-pulse-2 {
             position: absolute;
-            top: -40px; left: -40px; /* ขยายขอบเขตกล่องเพื่อให้รัศมีคลื่นกว้างได้ใจ */
-            width: 100px; height: 100px;
+            
+            /* คำนวณจุด Top และ Left ให้อยู่กึ่งกลางเสมอ ไม่ว่าจะขยายใหญ่แค่ไหน */
+            top: calc(5px - (var(--radar-size) / 2));
+            left: calc(5px - (var(--radar-size) / 2));
+            
+            width: var(--radar-size);
+            height: var(--radar-size);
+            
             border: 2px solid #ff453a;
-            background-color: rgba(255, 69, 58, 0.15);
+            background-color: rgba(255, 69, 58, 0.12);
             border-radius: 50%;
             opacity: 0;
-            animation: radarMotion 2s cubic-bezier(0.25, 0, 0, 1) infinite;
+            animation: radarMotion 2.5s cubic-bezier(0.1, 0.8, 0.3, 1) infinite;
         }
 
-        /* หน่วงเวลาให้วงที่สองขยายไล่เลี่ยตามกันมาเพิ่มความสมจริง */
         .radar-pulse-2 {
-            animation-delay: 1s;
+            animation-delay: 1.25s; /* หน่วงวงที่สองครึ่งจังหวะ */
         }
 
-        /* คีย์เฟรมควบคุมสเกล (ขยายจาก 0% -> 120% แล้วค่อยๆ จางหายลบเลือน) */
         @keyframes radarMotion {
             0% {
                 transform: scale(0);
-                opacity: 0.8;
+                opacity: 0.9;
             }
             80% {
                 opacity: 0.4;
             }
             100% {
-                transform: scale(1.2);
+                transform: scale(1);
                 opacity: 0;
             }
         }
@@ -88,7 +92,6 @@
     <div id="map"></div>
 
     <script>
-        // คอนฟิกโครงงานเชื่อมต่อ Firebase Realtime Database ของคุณ
         const firebaseConfig = {
           apiKey: "AIzaSyDMMwciq6QoLSaWK6xfdr0U3ynyahtoaSk",
           authDomain: "studio-a33fe.firebaseapp.com",
@@ -103,15 +106,12 @@
         firebase.initializeApp(firebaseConfig);
         const database = firebase.database();
         
-        // ล็อกจุดศูนย์กลางไว้ที่ตัวเมืองขอนแก่นแบบแผนที่ในรูปภาพมือถือ
         let map = L.map('map').setView([16.4322, 102.8236], 13); 
         let mapMarkersLayers = [];
 
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(map);
 
-        // ดักจับสัญญาณแบบสดๆ จากเครื่อง iPhone 
         database.ref('traffic_sessions').on('value', (snapshot) => {
-            // ล้างจุดมาร์กเกอร์เดิมออกให้หมดก่อนอัปเดตใหม่เพื่อลื่นไหลไม่หน่วง
             mapMarkersLayers.forEach(layer => map.removeLayer(layer));
             mapMarkersLayers = [];
 
@@ -119,26 +119,27 @@
                 const data = childSnapshot.val();
                 if(data.latitude && data.longitude) {
                     
-                    // 🌟 สร้าง HTML โครงสร้างปุ่มเรดาร์คลื่นสั่นไหวใส่เข้าในระบบแผนที่
+                    // 🧮 อัลกอริทึมคำนวณสเกลเรดาร์ (Dynamic Sizing)
+                    // ขั้นต่ำสุดที่ขยายคือ 40px และจำกัดขนาดใหญ่สุดไม่เกิน 250px เพื่อป้องกันไม่ให้คลื่นล้นล้นแผนที่เกินไป
+                    let calculatedSize = Math.min(250, Math.max(40, data.hourly_estimate * 0.4));
+
+                    // 🌟 ส่งค่าพิกเซลสเกลผ่าน inline style ด้วย Property `--radar-size`
                     let radarHtml = `
-                        <div class="radar-container">
+                        <div class="radar-container" style="--radar-size: ${calculatedSize}px;">
                             <div class="radar-center"></div>
                             <div class="radar-pulse-1"></div>
                             <div class="radar-pulse-2"></div>
                         </div>
                     `;
 
-                    // แปลงค่า HTML ข้างบนมาประกอบร่างเป็น Icon ของระบบแผนที่ Leaflet
                     let radarIcon = L.divIcon({
                         html: radarHtml,
-                        className: '', // ปิดการทับซ้อนคลาสเดิมของ Leaflet เพื่อให้แอนิเมชันไม่เพี้ยน
+                        className: '', 
                         iconSize: [20, 20]
                     });
 
-                    // ปักหมุดโดยการใช้มาร์กเกอร์ไอคอนตัวเรดาร์ที่เราทำขึ้นมา
                     let trafficMarker = L.marker([data.latitude, data.longitude], { icon: radarIcon }).addTo(map);
 
-                    // ติดตั้งป้ายบอกผลลัพธ์คันต่อชั่วโมงลอยเด่นอยู่เหนือหมุดสัญญาณ
                     trafficMarker.bindTooltip(`🚘 ${data.hourly_estimate} คัน/ชม.`, { 
                         permanent: true, 
                         direction: 'top', 
@@ -146,7 +147,6 @@
                         className: 'custom-map-label' 
                     });
 
-                    // จัดสไตล์โครงหน้าต่างสรุปตัวเลข (Pop-up) ให้คล้ายกับภาพ UI ล่าสุด
                     let popupDetail = `
                         <div style="font-family:sans-serif; color:#111; font-size:12px; min-width:170px; padding: 2px;">
                             <b style="color:#ff453a; font-size:13px; display:block; margin-bottom: 4px;">📍 สถิติจราจรรายพิกัด</b>
@@ -159,7 +159,6 @@
                     `;
                     trafficMarker.bindPopup(popupDetail);
                     
-                    // บันทึกลงคลังเลเยอร์
                     mapMarkersLayers.push(trafficMarker);
                 }
             });
