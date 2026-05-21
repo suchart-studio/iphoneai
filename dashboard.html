@@ -3,10 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Live Traffic Map Dashboard (Responsive)</title>
+    <title>Live Traffic Map Dashboard (Radar Pulse Effect)</title>
     
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
 
@@ -14,17 +15,80 @@
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body, html { width: 100%; height: 100%; background-color: #09090b; overflow: hidden; font-family: -apple-system, sans-serif; }
         #map { width: 100%; height: 100%; }
+
+        /* =================================================== */
+        /* 📡 ชุดคำสั่ง CSS สำหรับสร้างเอฟเฟกต์เรดาร์สะท้อน (Radar Animation) */
+        /* =================================================== */
+        .radar-container {
+            position: relative;
+            width: 20px;
+            height: 20px;
+            transform: translate(-50%, -50%); /* จัดตำแหน่งให้อยู่กึ่งกลางพิกัดเป๊ะๆ */
+        }
+
+        /* จุดไข่แดงศูนย์กลาง (Core Node) */
+        .radar-center {
+            position: absolute;
+            top: 5px; left: 5px;
+            width: 10px; height: 10px;
+            background-color: #ff453a;
+            border-radius: 50%;
+            z-index: 10;
+            box-shadow: 0 0 10px #ff453a;
+        }
+
+        /* วงแหวนคลื่นเรดาร์ชั้นที่ 1 และชั้นที่ 2 */
+        .radar-pulse-1, .radar-pulse-2 {
+            position: absolute;
+            top: -40px; left: -40px; /* ขยายขอบเขตกล่องเพื่อให้รัศมีคลื่นกว้างได้ใจ */
+            width: 100px; height: 100px;
+            border: 2px solid #ff453a;
+            background-color: rgba(255, 69, 58, 0.15);
+            border-radius: 50%;
+            opacity: 0;
+            animation: radarMotion 2s cubic-bezier(0.25, 0, 0, 1) infinite;
+        }
+
+        /* หน่วงเวลาให้วงที่สองขยายไล่เลี่ยตามกันมาเพิ่มความสมจริง */
+        .radar-pulse-2 {
+            animation-delay: 1s;
+        }
+
+        /* คีย์เฟรมควบคุมสเกล (ขยายจาก 0% -> 120% แล้วค่อยๆ จางหายลบเลือน) */
+        @keyframes radarMotion {
+            0% {
+                transform: scale(0);
+                opacity: 0.8;
+            }
+            80% {
+                opacity: 0.4;
+            }
+            100% {
+                transform: scale(1.2);
+                opacity: 0;
+            }
+        }
+
+        /* ตกแต่งเลเบลกล่องข้อความปริมาณจราจร */
         .custom-map-label {
-            background: rgba(255, 69, 58, 0.95) !important; border: 1px solid #fff !important; 
-            color: #fff !important; font-weight: bold !important; font-size: 12px !important;
-            border-radius: 6px !important; padding: 3px 6px !important; box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            background: rgba(255, 69, 58, 0.95) !important;
+            border: 1px solid #fff !important; 
+            color: #fff !important; 
+            font-weight: bold !important; 
+            font-size: 12px !important;
+            border-radius: 6px !important; 
+            padding: 3px 6px !important; 
+            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+            white-space: nowrap;
         }
     </style>
 </head>
 <body>
+
     <div id="map"></div>
 
     <script>
+        // คอนฟิกโครงงานเชื่อมต่อ Firebase Realtime Database ของคุณ
         const firebaseConfig = {
           apiKey: "AIzaSyDMMwciq6QoLSaWK6xfdr0U3ynyahtoaSk",
           authDomain: "studio-a33fe.firebaseapp.com",
@@ -38,36 +102,65 @@
 
         firebase.initializeApp(firebaseConfig);
         const database = firebase.database();
-        let map = L.map('map').setView([16.4322, 102.8236], 13); // ศูนย์กลางขอนแก่น
+        
+        // ล็อกจุดศูนย์กลางไว้ที่ตัวเมืองขอนแก่นแบบแผนที่ในรูปภาพมือถือ
+        let map = L.map('map').setView([16.4322, 102.8236], 13); 
         let mapMarkersLayers = [];
 
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(map);
 
+        // ดักจับสัญญาณแบบสดๆ จากเครื่อง iPhone 
         database.ref('traffic_sessions').on('value', (snapshot) => {
+            // ล้างจุดมาร์กเกอร์เดิมออกให้หมดก่อนอัปเดตใหม่เพื่อลื่นไหลไม่หน่วง
             mapMarkersLayers.forEach(layer => map.removeLayer(layer));
             mapMarkersLayers = [];
 
             snapshot.forEach((childSnapshot) => {
                 const data = childSnapshot.val();
                 if(data.latitude && data.longitude) {
-                    let circleRadius = Math.max(30, data.hourly_estimate * 0.2);
-                    let trafficCircle = L.circle([data.latitude, data.longitude], {
-                        color: '#ff453a', fillColor: '#ff453a', fillOpacity: 0.4, radius: circleRadius
-                    }).addTo(map);
-
-                    trafficCircle.bindTooltip(`🚘 ${data.hourly_estimate} คัน/ชม.`, { permanent: true, direction: 'center', className: 'custom-map-label' });
-
-                    let popupDetail = `
-                        <div style="font-family:sans-serif; color:#111; font-size:12px; min-width:150px;">
-                            <b style="color:#ff453a;">📍 จุดบันทึกการจราจร</b><br>
-                            <b>ประมาณการ:</b> ${data.hourly_estimate} คัน/ชม.<br>
-                            <b>นับจริง (1 นาที):</b> ${data.total_vehicles_1min} คัน<br>
-                            👥 คนเดินเท้า: ${data.counts.person || 0} คน<br>
-                            <small style="color:gray;">${new Date(data.timestamp).toLocaleString('th-TH')}</small>
+                    
+                    // 🌟 สร้าง HTML โครงสร้างปุ่มเรดาร์คลื่นสั่นไหวใส่เข้าในระบบแผนที่
+                    let radarHtml = `
+                        <div class="radar-container">
+                            <div class="radar-center"></div>
+                            <div class="radar-pulse-1"></div>
+                            <div class="radar-pulse-2"></div>
                         </div>
                     `;
-                    trafficCircle.bindPopup(popupDetail);
-                    mapMarkersLayers.push(trafficCircle);
+
+                    // แปลงค่า HTML ข้างบนมาประกอบร่างเป็น Icon ของระบบแผนที่ Leaflet
+                    let radarIcon = L.divIcon({
+                        html: radarHtml,
+                        className: '', // ปิดการทับซ้อนคลาสเดิมของ Leaflet เพื่อให้แอนิเมชันไม่เพี้ยน
+                        iconSize: [20, 20]
+                    });
+
+                    // ปักหมุดโดยการใช้มาร์กเกอร์ไอคอนตัวเรดาร์ที่เราทำขึ้นมา
+                    let trafficMarker = L.marker([data.latitude, data.longitude], { icon: radarIcon }).addTo(map);
+
+                    // ติดตั้งป้ายบอกผลลัพธ์คันต่อชั่วโมงลอยเด่นอยู่เหนือหมุดสัญญาณ
+                    trafficMarker.bindTooltip(`🚘 ${data.hourly_estimate} คัน/ชม.`, { 
+                        permanent: true, 
+                        direction: 'top', 
+                        offset: [0, -10],
+                        className: 'custom-map-label' 
+                    });
+
+                    // จัดสไตล์โครงหน้าต่างสรุปตัวเลข (Pop-up) ให้คล้ายกับภาพ UI ล่าสุด
+                    let popupDetail = `
+                        <div style="font-family:sans-serif; color:#111; font-size:12px; min-width:170px; padding: 2px;">
+                            <b style="color:#ff453a; font-size:13px; display:block; margin-bottom: 4px;">📍 สถิติจราจรรายพิกัด</b>
+                            <hr style="border:0; border-top:1px solid #ddd; margin:4px 0;">
+                            <b>ประมาณการ:</b> <span style="color:#ff453a; font-weight:bold;">${data.hourly_estimate} คัน/ชม.</span><br>
+                            <b>ยอดนับจริง (1 นาที):</b> ${data.total_vehicles_1min} คัน<br>
+                            👥 คนเดินเท้าผ่าน: ${data.counts.person || 0} คน<br>
+                            <small style="color:gray; display:block; margin-top:4px;">บันทึกเมื่อ: ${new Date(data.timestamp).toLocaleString('th-TH')}</small>
+                        </div>
+                    `;
+                    trafficMarker.bindPopup(popupDetail);
+                    
+                    // บันทึกลงคลังเลเยอร์
+                    mapMarkersLayers.push(trafficMarker);
                 }
             });
         });
